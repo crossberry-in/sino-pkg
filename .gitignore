@@ -1,0 +1,25 @@
+# Build artifacts
+build/
+dist/
+sino_modules/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Lock file (commit this for reproducible builds, but allow ignoring)
+# sino.lock
+tests/_sino_import.py
