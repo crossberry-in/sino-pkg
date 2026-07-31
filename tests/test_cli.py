@@ -171,7 +171,7 @@ class TestCLICommands(unittest.TestCase):
         rc, stdout, _ = run_sino("version")
         self.assertEqual(rc, 0)
         self.assertIn("sino-pkg", stdout)
-        self.assertIn("1.0.0", stdout)
+        self.assertIn("1.1.0", stdout)
 
     def test_help(self):
         rc, stdout, _ = run_sino("help")

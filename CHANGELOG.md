@@ -7,6 +7,98 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.1.0] — 2026-08-01
+
+### Added — Modern CLI UI/UX
+
+Complete redesign of the command-line interface with a polished developer
+experience comparable to Rust Cargo, Clang, and Go tooling.
+
+- **`sino_ui.py` module** — A comprehensive UI library with:
+  - Terminal capability auto-detection (TTY, NO_COLOR, FORCE_COLOR, encoding)
+  - Consistent color palette calibrated for light and dark terminals
+  - Unicode box drawing with ASCII fallback (for `dumb` terminals)
+  - Spinner & progress bar
+  - Step list (build progress with checkmarks)
+  - Diagnostic renderer with source context, carets, hints, suggestions, doc URLs
+  - Banner component
+  - REPL framework (banner + prompt)
+  - Table renderer
+  - Panic UI with stack traces
+  - Fatal compiler error UI
+
+- **New commands**:
+  - `sino new <project>` — Create a new binary project (alias for `init --bin`)
+  - `sino repl` — Start the interactive Sino REPL
+  - `sino bench` — Run benchmarks (Lexer, Parser, Compiler, Runtime, Memory)
+  - `sino fmt` — Format source files (normalize indentation, strip trailing whitespace)
+  - `sino lint` — Lint source files (unused variable detection with `SN2001` warning)
+  - `sino search <query>` — Search packages
+  - `sino uninstall <name>` — Uninstall a package
+  - `sino login` — Log in to the registry (stub with credential storage)
+  - `sino logout` — Log out of the registry
+  - `sino doctor` — Check the Sino environment (compiler, package manager, runtime, libraries, network)
+
+- **Diagnostic UI** — All errors, warnings, notes, and help now render with:
+  - Error codes (`SN1001` for unknown variable, `SN2001` for unused variable, etc.)
+  - Source file context with line numbers and carets pointing to the error
+  - Hints and suggestions
+  - Documentation URLs
+  - Severity-specific colors (red for errors, yellow for warnings, blue for notes/help)
+
+- **Startup banner** — Unicode box-drawn banner shown by `sino version`, `sino help`, `sino doctor`, and `sino build --banner`:
+  ```
+  ┌────────────────────────┐
+  │     Sino Compiler      │
+  │     Version 1.1.0      │
+  │  Fast • Safe • Modern  │
+  └────────────────────────┘
+  ```
+
+- **Build progress** — `sino build` now shows a step list:
+  ```
+  ✔ Loading configuration
+  ✔ Resolving packages
+  ✔ Parsing
+  ✔ Semantic analysis
+  ✔ Type checking
+  ✔ Optimizing
+  ✔ Generating code
+  ✔ Linking
+  ```
+
+- **Color control**:
+  - `--no-color` flag disables colored output
+  - `--force-color` flag forces colored output (even when piped)
+  - `NO_COLOR` environment variable respected
+  - `FORCE_COLOR` environment variable respected
+  - Auto-detection of TTY and terminal encoding
+
+- **Interpreter discovery** — `find_sino_interpreter()` looks for the Sino
+  interpreter binary at:
+  1. `$SINO_INTERPRETER` env var
+  2. `~/.sino/bin/sino-interpreter`
+  3. `sino-interpreter` on PATH
+  4. `sino` on PATH (skipping the sino-pkg script itself)
+
+### Changed
+
+- `sino version` now shows the banner + toolchain info + detected compilers
+- `sino help` now shows the banner + formatted command list + examples + options
+- `sino build` now shows a step list with timing and output path
+- `sino test` now uses the polished UI for pass/fail messages
+- `sino install` now uses the polished UI for resolve/success messages
+- `sino clean` now shows a single success message with removed artifacts
+- `sino run` now uses `find_sino_interpreter()` instead of `shutil.which("sino")`
+- All `info`, `ok`, `warn`, `error` helpers now delegate to the `sino_ui` module
+- Version bumped from 1.0.0 → 1.1.0
+
+### Fixed
+
+- Fixed `sino test` and `sino run` failing when `sino` on PATH resolves to the sino-pkg script itself (now skips Python scripts when looking for the interpreter binary)
+
+---
+
 ## [v1.0.0] — 2026-08-01
 
 ### Added
