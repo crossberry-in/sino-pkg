@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.2.0] — 2026-08-01
+
+### Added — Unified `sino` Command Dispatcher (Go-style)
+
+Following the Go/Cargo model, `sino` is now a **unified dispatcher** that routes
+all Sino-related commands through a single entry point. This resolves the
+naming conflict between the Sino interpreter and the sino-pkg package manager.
+
+- **Unified dispatcher** — `sino` now handles both interpreter and package
+  manager commands:
+  - `sino` (no args) → start REPL (via interpreter)
+  - `sino file.si` → run file (via interpreter)
+  - `sino <subcommand>` → sino-pkg subcommand (build, test, add, etc.)
+  - `sino -v / --version` → sino-pkg version
+  - `sino -h / --help` → sino-pkg help
+  - `sino <unknown-word>` → try as filename via interpreter (backwards compatible)
+
+- **Interpreter renamed to `sino-interpreter`** — The Sino interpreter binary
+  is now installed as `sino-interpreter` (not `sino`) to avoid conflict with
+  the dispatcher. The `sino` command is now the Python dispatcher script.
+
+- **Migration logic** — The sino-pkg installer automatically detects if an old
+  interpreter binary is installed as `sino` and renames it to `sino-interpreter`
+  before installing the dispatcher. This provides a seamless upgrade path for
+  existing users.
+
+- **Cross-platform interpreter discovery** — `find_sino_interpreter()` now
+  handles Windows (`.exe` suffix) and checks multiple locations:
+  1. `$SINO_INTERPRETER` env var
+  2. `~/.sino/bin/sino-interpreter` (or `.exe` on Windows)
+  3. `sino-interpreter` on PATH
+  4. `sino` on PATH (skipping the sino-pkg script itself)
+
+### Fixed
+
+- **Critical: `sino version` / `sino help` / `sino search` returned "Cannot open file"** —
+  This happened because the Sino interpreter was installed as `sino`, so running
+  `sino version` made the interpreter try to open `version` as a script file.
+  The unified dispatcher now intercepts known subcommands before they reach the
+  interpreter.
+
+### Changed
+
+- sino-lang-docs installer now installs the interpreter as `sino-interpreter`
+- sino-pkg installer now installs the dispatcher as `sino`
+- sino-pkg installer now warns if the interpreter is not installed
+- Version bumped from 1.1.0 → 1.2.0
+
+---
+
 ## [v1.1.0] — 2026-08-01
 
 ### Added — Modern CLI UI/UX

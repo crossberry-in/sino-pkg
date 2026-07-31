@@ -63,7 +63,7 @@ from datetime import datetime
 sys.path.insert(0, str(Path(__file__).parent.resolve()))
 from sino_ui import UI, create_ui, ui_from_args
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 
 # ============================================================================
 # Configuration
@@ -1222,18 +1222,21 @@ def find_sino_interpreter():
 
     Order of lookup:
       1. $SINO_INTERPRETER env var
-      2. ~/.sino/bin/sino-interpreter
+      2. ~/.sino/bin/sino-interpreter (or sino-interpreter.exe on Windows)
       3. 'sino-interpreter' on PATH
       4. 'sino' on PATH, but only if it's NOT the sino-pkg Python script
       5. None
     """
+    is_windows = SYSTEM == "windows"
+    exe_suffix = ".exe" if is_windows else ""
+
     # 1. Env var
     env_path = os.environ.get("SINO_INTERPRETER")
     if env_path and Path(env_path).exists():
         return env_path
 
     # 2. ~/.sino/bin/sino-interpreter
-    interp = SINO_HOME / "bin" / "sino-interpreter"
+    interp = SINO_HOME / "bin" / f"sino-interpreter{exe_suffix}"
     if interp.exists():
         return str(interp)
 
@@ -1244,23 +1247,19 @@ def find_sino_interpreter():
 
     # 4. sino on PATH, but skip if it's our own script
     self_path = str(Path(__file__).resolve())
-    for name in ["sino"]:
-        path = shutil.which(name)
-        if not path:
-            continue
+    path = shutil.which("sino")
+    if path:
         path = str(Path(path).resolve())
-        if path == self_path:
-            continue
-        # Check if it's a Python script (sino-pkg) vs a binary (interpreter)
-        try:
-            with open(path, "rb") as f:
-                first = f.read(2)
-            if first == b"#!":
-                # It's a script — skip (likely sino-pkg itself or another script)
-                continue
-            return path
-        except Exception:
-            continue
+        if path != self_path:
+            # Check if it's a Python script (sino-pkg) vs a binary (interpreter)
+            try:
+                with open(path, "rb") as f:
+                    first = f.read(2)
+                if first != b"#!":
+                    # It's a binary — the interpreter!
+                    return path
+            except Exception:
+                pass
 
     return None
 
@@ -1613,35 +1612,68 @@ COMMANDS = {
 }
 
 def main():
+    """Unified Sino command dispatcher.
+
+    Routing rules (Go-style unified CLI):
+      - `sino` (no args)                     → start REPL (via interpreter)
+      - `sino file.si`                       → run file (via interpreter)
+      - `sino -` or `sino --`                → interpreter (stdin mode)
+      - `sino -v / --version / -V`           → sino-pkg version
+      - `sino -h / --help`                   → sino-pkg help
+      - `sino <subcommand> [args]`           → sino-pkg subcommand
+      - `sino <unknown-word>`                → try as filename via interpreter
+                                                 (preserves backwards compat)
+    """
     global ui
 
+    # No args → start the REPL via the interpreter
     if len(sys.argv) < 2:
-        cmd_help([])
-        sys.exit(0)
+        cmd_repl([])
+        return
 
     cmd = sys.argv[1]
     args = sys.argv[2:]
 
+    # Flags that should show sino-pkg's version/help
     if cmd in ("-v", "--version", "-V"):
+        ui = create_ui()
         cmd_version([])
         return
     if cmd in ("-h", "--help"):
+        ui = create_ui()
         cmd_help([])
         return
 
-    # Detect --no-color / --force-color from args and set up UI
-    ui = ui_from_args(args)
+    # If the first arg is a .si file, run it via the interpreter
+    if cmd.endswith(".si"):
+        ui = create_ui()
+        interp = find_sino_interpreter()
+        if not interp:
+            die("Sino interpreter not found. Install it from "
+                "https://github.com/crossberry-in/sino-lang-docs/releases "
+                "or set $SINO_INTERPRETER.")
+        os.execvp(interp, [interp, cmd] + args)
 
-    if cmd not in COMMANDS:
-        ui.fail(f"Unknown command: {cmd}")
+    # If the first arg is a known subcommand, dispatch to sino-pkg
+    if cmd in COMMANDS:
+        ui = ui_from_args(args)
+        SINO_HOME.mkdir(parents=True, exist_ok=True)
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        COMMANDS[cmd](args)
+        return
+
+    # Otherwise, treat the first arg as a filename and pass to the interpreter.
+    # This preserves backwards compatibility: `sino myscript` still works
+    # if `myscript` is a file (the interpreter will error if it's not).
+    ui = create_ui()
+    interp = find_sino_interpreter()
+    if interp:
+        os.execvp(interp, [interp] + sys.argv[1:])
+    else:
+        ui.fail(f"Unknown command or file: {cmd}")
         ui.write()
         ui.info("Run 'sino help' for usage.")
         sys.exit(1)
-
-    SINO_HOME.mkdir(parents=True, exist_ok=True)
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
-
-    COMMANDS[cmd](args)
 
 if __name__ == "__main__":
     main()

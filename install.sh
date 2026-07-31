@@ -115,6 +115,27 @@ install_sino() {
     local need_sudo=0
 
     final_path="$install_dir/$BINARY_NAME"
+
+    # --- Migration: if an old interpreter binary is installed as 'sino', rename it ---
+    local existing_sino
+    existing_sino="$(command -v sino 2>/dev/null || true)"
+    if [ -n "$existing_sino" ]; then
+        # Check if it's a binary (not a Python script with #!)
+        local first_bytes
+        first_bytes="$(head -c 2 "$existing_sino" 2>/dev/null || echo "")"
+        if [ "$first_bytes" != "#!" ]; then
+            # It's a binary — likely the old interpreter. Rename it.
+            local interp_path="$install_dir/sino-interpreter"
+            info "Migrating existing 'sino' binary to 'sino-interpreter'..."
+            if [ -w "$install_dir" ]; then
+                mv "$existing_sino" "$interp_path" 2>/dev/null || true
+            else
+                sudo mv "$existing_sino" "$interp_path" 2>/dev/null || true
+            fi
+            success "Migrated interpreter to: $interp_path"
+        fi
+    fi
+
     mkdir -p "$install_dir" 2>/dev/null || need_sudo=1
 
     if [ ! -w "$install_dir" ]; then
@@ -147,10 +168,20 @@ verify_installation() {
 
     info "Verifying installation..."
     if "$sino_cmd" version 2>/dev/null; then
-        success "sino-pkg is installed and working!"
+        success "sino-pkg dispatcher is installed and working!"
     else
         warn "sino was installed but 'sino version' failed."
         warn "Try opening a new terminal, then run 'sino version'."
+    fi
+
+    # Check if the Sino interpreter is also installed
+    local interp
+    interp="$(command -v sino-interpreter 2>/dev/null || true)"
+    if [ -z "$interp" ]; then
+        printf '\n' >&2
+        warn "The Sino interpreter ('sino-interpreter') was not found." >&2
+        info "Install it for 'sino file.si' and 'sino repl' to work:" >&2
+        info "  curl -fsSL https://github.com/crossberry-in/sino-lang-docs/raw/main/install.sh | bash" >&2
     fi
 
     printf '\n' >&2
@@ -159,6 +190,8 @@ verify_installation() {
     info "  sino init --bin myapp   # create an application" >&2
     info "  sino build              # build the project" >&2
     info "  sino test               # run tests" >&2
+    info "  sino my_script.si       # run a script (needs interpreter)" >&2
+    info "  sino                    # start REPL (needs interpreter)" >&2
     info "" >&2
     info "Docs: https://github.com/crossberry-in/sino-pkg" >&2
 }
