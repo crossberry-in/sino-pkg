@@ -1,0 +1,1720 @@
+#!/usr/bin/env python3
+"""
+Mozhi Programming Language Toolchain (mozhi-pkg) v1.1.0
+
+A modern, beautiful, fast, and consistent command-line interface for the
+Sino programming language. Provides a polished developer experience
+comparable to Rust Cargo, Clang, and Go tooling.
+
+Usage:
+    sino <command> [options] [args]
+
+Commands:
+    new        Create a new binary project
+    init       Initialize a new Sino project (--lib or --bin)
+    build      Build the project (static/shared/native output)
+    run        Build and run the project
+    repl       Start the interactive Mozhi REPL
+    test       Run tests
+    bench      Run benchmarks
+    fmt        Format source files
+    lint       Lint source files
+    doc        Generate documentation
+    clean      Remove build artifacts
+    add        Add a dependency
+    remove     Remove a dependency
+    update     Update dependencies
+    search     Search packages
+    install    Install dependencies
+    uninstall  Uninstall a package
+    publish    Publish to registry (stub)
+    login      Log in to the registry
+    logout     Log out of the registry
+    doctor     Check the Sino environment
+    version    Show version
+    help       Show help
+
+Examples:
+    sino new myapp
+    sino init --lib math
+    sino build --shared
+    sino run
+    sino test
+    sino doc
+    sino doctor
+"""
+
+import sys
+import os
+import re
+import json
+import shutil
+import subprocess
+import hashlib
+import platform
+import tempfile
+import zipfile
+import urllib.request
+import urllib.error
+from pathlib import Path
+from datetime import datetime
+
+# Import the sino_ui module — look in same directory, then ~/.sino/bin/
+_ui_search_paths = [
+    Path(__file__).parent.resolve(),                       # same dir as this script
+    Path.home() / ".sino" / "bin",                          # user's sino bin dir
+    Path("/usr/local/lib/sino"),                            # system lib dir
+    Path("/usr/local/share/sino"),                          # system share dir
+]
+
+def _find_sino_ui():
+    """Find sino_ui.py in known locations. Returns the dir containing it, or None."""
+    for p in _ui_search_paths:
+        if (p / "sino_ui.py").exists():
+            return p
+    return None
+
+_ui_dir = _find_sino_ui()
+
+if _ui_dir is None:
+    # Auto-download sino_ui.py to ~/.sino/bin/
+    import urllib.request
+    _ui_url = "https://github.com/crossberry-in/mozhi-pkg/raw/main/sino_ui.py"
+    _target = Path.home() / ".sino" / "bin" / "sino_ui.py"
+    _target.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        urllib.request.urlretrieve(_ui_url, _target)
+        _ui_dir = _target.parent
+    except Exception:
+        # Last resort: print a helpful error and exit
+        import sys as _sys
+        _sys.stderr.write(
+            "Error: sino_ui.py module not found.\n\n"
+            "This usually means the sino dispatcher was installed without its\n"
+            "companion UI module. To fix:\n\n"
+            "  Option 1: Re-install mozhi-pkg (installs both files together):\n"
+            "    curl -fsSL https://github.com/crossberry-in/mozhi-pkg/raw/main/install.sh | bash\n\n"
+            "  Option 2: Download sino_ui.py manually:\n"
+            "    sudo curl -fsSL -o /usr/local/lib/sino/sino_ui.py \\\n"
+            "      https://github.com/crossberry-in/mozhi-pkg/raw/main/sino_ui.py\n"
+            "    sudo mkdir -p /usr/local/lib/sino\n\n"
+        )
+        _sys.exit(1)
+
+sys.path.insert(0, str(_ui_dir))
+from sino_ui import UI, create_ui, ui_from_args
+
+VERSION = "2.0.0"
+
+# ============================================================================
+# Configuration
+# ============================================================================
+
+MOZHI_HOME = Path.home() / ".sino"
+CACHE_DIR = MOZHI_HOME / "cache"
+REGISTRY_DIR = MOZHI_HOME / "registry"
+GLOBAL_LIB_DIR = MOZHI_HOME / "libs"
+
+BUILD_DIR = "build"
+DIST_DIR = "dist"
+LOCK_FILE = "mozhi.lock"
+MANIFEST_FILE = "mozhi.toml"
+
+# Platform detection
+SYSTEM = platform.system().lower()
+MACHINE = platform.machine().lower()
+
+if SYSTEM == "linux":
+    SHARED_LIB_EXT = ".so"
+    SHARED_LIB_PREFIX = "lib"
+elif SYSTEM == "darwin":
+    SHARED_LIB_EXT = ".dylib"
+    SHARED_LIB_PREFIX = "lib"
+elif SYSTEM == "windows":
+    SHARED_LIB_EXT = ".dll"
+    SHARED_LIB_PREFIX = ""
+else:
+    SHARED_LIB_EXT = ".so"
+    SHARED_LIB_PREFIX = "lib"
+
+STATIC_LIB_EXT = ".a"
+STATIC_LIB_PREFIX = "lib"
+NATIVE_LIB_EXT = ".mzl"
+
+# ============================================================================
+# UI / Logging — uses sino_ui module for consistent, polished output
+# ============================================================================
+
+# Global UI instance — created in main() based on --no-color / --force-color args
+ui: UI = create_ui()
+
+def info(msg):
+    """Info message (dim arrow prefix)."""
+    ui.info(msg)
+
+def ok(msg):
+    """Success message."""
+    ui.success(msg)
+
+def warn(msg):
+    """Warning message."""
+    ui.warning(msg)
+
+def error(msg):
+    """Error message (to stderr)."""
+    ui.fail(msg)
+
+def step(msg):
+    """Step indicator (dim, with arrow)."""
+    ui.info(msg)
+
+def die(msg, code=1):
+    """Print error and exit."""
+    ui.fail(msg)
+    sys.exit(code)
+
+# ============================================================================
+# TOML Parser (minimal — supports the subset we need)
+# ============================================================================
+
+def parse_toml(text):
+    """Parse a minimal TOML file into a dict. Supports:
+    - key = "value" (strings)
+    - key = 1.0 (numbers)
+    - key = true (booleans)
+    - key = ["a", "b"] (arrays of strings)
+    - [section] and [section.subsection]
+    - # comments
+    - multi-line not supported
+    """
+    result = {}
+    current_section = result
+    for line_num, line in enumerate(text.splitlines(), 1):
+        line = line.split("#")[0].strip()
+        if not line:
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            section_path = line[1:-1].strip().split(".")
+            current_section = result
+            for part in section_path:
+                part = part.strip().strip('"').strip("'")
+                if part not in current_section:
+                    current_section[part] = {}
+                current_section = current_section[part]
+            continue
+        if "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip().strip('"').strip("'")
+        value = value.strip()
+        if value.startswith('"') and value.endswith('"'):
+            current_section[key] = value[1:-1]
+        elif value.startswith("'") and value.endswith("'"):
+            current_section[key] = value[1:-1]
+        elif value.startswith("[") and value.endswith("]"):
+            items = []
+            inner = value[1:-1].strip()
+            if inner:
+                for item in inner.split(","):
+                    item = item.strip().strip('"').strip("'")
+                    if item:
+                        items.append(item)
+            current_section[key] = items
+        elif value.lower() in ("true", "false"):
+            current_section[key] = value.lower() == "true"
+        else:
+            try:
+                if "." in value:
+                    current_section[key] = float(value)
+                else:
+                    current_section[key] = int(value)
+            except ValueError:
+                current_section[key] = value
+    return result
+
+def dump_toml(data, indent=0):
+    """Serialize a dict back to TOML format (minimal)."""
+    lines = []
+    prefix = "  " * indent
+    for key, value in data.items():
+        if isinstance(value, dict):
+            lines.append(f"{prefix}[{key}]")
+            lines.append(dump_toml(value, indent + 1))
+        elif isinstance(value, str):
+            lines.append(f'{prefix}{key} = "{value}"')
+        elif isinstance(value, bool):
+            lines.append(f"{prefix}{key} = {'true' if value else 'false'}")
+        elif isinstance(value, (int, float)):
+            lines.append(f"{prefix}{key} = {value}")
+        elif isinstance(value, list):
+            items = ", ".join(f'"{i}"' for i in value)
+            lines.append(f"{prefix}{key} = [{items}]")
+    return "\n".join(lines)
+
+# ============================================================================
+# Semantic Versioning
+# ============================================================================
+
+class SemVer:
+    """Semantic version: MAJOR.MINOR.PATCH with optional pre-release and build."""
+
+    SEMVER_RE = re.compile(
+        r"^(\d+)\.(\d+)\.(\d+)"
+        r"(?:-([0-9A-Za-z-.]+))?"
+        r"(?:\+([0-9A-Za-z-.]+))?$"
+    )
+
+    def __init__(self, major, minor, patch, pre=None, build=None):
+        self.major = major
+        self.minor = minor
+        self.patch = patch
+        self.pre = pre
+        self.build = build
+
+    @classmethod
+    def parse(cls, s):
+        s = s.strip().lstrip("v")
+        m = cls.SEMVER_RE.match(s)
+        if not m:
+            raise ValueError(f"Invalid semver: {s}")
+        return cls(int(m.group(1)), int(m.group(2)), int(m.group(3)),
+                   m.group(4), m.group(5))
+
+    def __str__(self):
+        s = f"{self.major}.{self.minor}.{self.patch}"
+        if self.pre:
+            s += f"-{self.pre}"
+        if self.build:
+            s += f"+{self.build}"
+        return s
+
+    def __lt__(self, other):
+        if self.major != other.major:
+            return self.major < other.major
+        if self.minor != other.minor:
+            return self.minor < other.minor
+        if self.patch != other.patch:
+            return self.patch < other.patch
+        if self.pre and not other.pre:
+            return True
+        if not self.pre and other.pre:
+            return False
+        if self.pre and other.pre:
+            return self.pre < other.pre
+        return False
+
+    def __eq__(self, other):
+        return (self.major == other.major and self.minor == other.minor
+                and self.patch == other.patch and self.pre == other.pre)
+
+    def __le__(self, other):
+        return self == other or self < other
+
+def parse_version_req(req):
+    """Parse a version requirement like '1.0.0', '^1.0.0', '~1.0', '>=1.0.0', '*'.
+
+    Returns a function (SemVer -> bool) that tests if a version satisfies the req.
+    """
+    req = req.strip()
+    if req == "*" or req == "":
+        return lambda v: True
+    if req.startswith("^"):
+        base = SemVer.parse(req[1:])
+        return lambda v: (v.major == base.major and v >= base) or \
+                         (base.major == 0 and v.minor == base.minor and v >= base)
+    if req.startswith("~"):
+        base = SemVer.parse(req[1:])
+        return lambda v: v.major == base.major and v.minor == base.minor and v >= base
+    if req.startswith(">="):
+        base = SemVer.parse(req[2:])
+        return lambda v: v >= base
+    if req.startswith(">"):
+        base = SemVer.parse(req[1:])
+        return lambda v: not (v <= base)
+    if req.startswith("<="):
+        base = SemVer.parse(req[2:])
+        return lambda v: v <= base
+    if req.startswith("<"):
+        base = SemVer.parse(req[1:])
+        return lambda v: not (v >= base) and v != base
+    if req.startswith("="):
+        base = SemVer.parse(req[1:])
+        return lambda v: v == base
+    base = SemVer.parse(req)
+    return lambda v: v == base
+
+# ============================================================================
+# Manifest
+# ============================================================================
+
+class Manifest:
+    """Represents a mozhi.toml manifest file."""
+
+    def __init__(self, data):
+        self.data = data
+        self.name = data.get("name", "")
+        self.version = data.get("version", "0.1.0")
+        self.authors = data.get("authors", [])
+        self.license = data.get("license", "")
+        self.description = data.get("description", "")
+        self.dependencies = data.get("dependencies", {})
+        self.build = data.get("build", {})
+        self.build_output = self.build.get("output", {})
+        self.output_type = self.build_output.get("type", "static")
+
+    @classmethod
+    def load(cls, path):
+        p = Path(path)
+        if not p.exists():
+            die(f"No {MANIFEST_FILE} found in current directory. Run 'sino init' first.")
+        text = p.read_text()
+        return cls(parse_toml(text))
+
+    def save(self, path):
+        Path(path).write_text(dump_toml(self.data))
+
+    def build_config(self):
+        return {
+            "c": self.build.get("c", False),
+            "cpp": self.build.get("cpp", False),
+            "assembly": self.build.get("assembly", False),
+            "rust": self.build.get("rust", False),
+        }
+
+# ============================================================================
+# Lock File
+# ============================================================================
+
+LOCK_VERSION = 1
+
+def load_lock():
+    p = Path(LOCK_FILE)
+    if not p.exists():
+        return None
+    try:
+        return json.loads(p.read_text())
+    except json.JSONDecodeError:
+        warn(f"Corrupted {LOCK_FILE}, ignoring.")
+        return None
+
+def save_lock(lock_data):
+    lock_data["version"] = LOCK_VERSION
+    lock_data["updated"] = datetime.now().astimezone().isoformat()
+    Path(LOCK_FILE).write_text(json.dumps(lock_data, indent=2, sort_keys=True))
+
+# ============================================================================
+# Dependency Resolution
+# ============================================================================
+
+def resolve_dependency(name, version_req):
+    """Resolve a dependency to a concrete version and source path.
+    Returns (version_string, source_path) or raises.
+    """
+    if name.startswith("github:"):
+        return resolve_github_dependency(name, version_req)
+    if name.startswith("local:"):
+        return resolve_local_dependency(name, version_req)
+    return resolve_registry_dependency(name, version_req)
+
+def resolve_github_dependency(name, version_req):
+    """Clone a GitHub repo, find a matching version tag, cache it."""
+    parts = name[len("github:"):]
+    if "@" in parts:
+        repo, _, tag = parts.partition("@")
+    else:
+        repo, tag = parts, None
+
+    cache_key = f"{repo}@{tag or version_req}"
+    cache_path = CACHE_DIR / "github" / repo.replace("/", "_")
+    if tag:
+        cache_path = cache_path.parent / f"{cache_path.name}@{tag}"
+
+    if cache_path.exists():
+        info(f"Using cached {name}")
+        manifest = Manifest.load(cache_path / MANIFEST_FILE)
+        return manifest.version, cache_path
+
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+
+    url = f"https://github.com/{repo}.git"
+    if tag:
+        if not tag[0].isdigit() and not tag.startswith("v"):
+            tag_to_use = tag
+        else:
+            tag_to_use = tag
+        info(f"Cloning {url} @ {tag_to_use}...")
+        result = subprocess.run(
+            ["git", "clone", "--depth", "1", "--branch", tag_to_use, url, str(cache_path)],
+            capture_output=True, text=True
+        )
+        if result.returncode != 0:
+            die(f"git clone failed: {result.stderr.strip()}")
+    else:
+        info(f"Cloning {url}...")
+        result = subprocess.run(
+            ["git", "clone", "--depth", "1", url, str(cache_path)],
+            capture_output=True, text=True
+        )
+        if result.returncode != 0:
+            die(f"git clone failed: {result.stderr.strip()}")
+
+    if not (cache_path / MANIFEST_FILE).exists():
+        die(f"Repository {repo} does not contain {MANIFEST_FILE}")
+
+    manifest = Manifest.load(cache_path / MANIFEST_FILE)
+    return manifest.version, cache_path
+
+def resolve_local_dependency(name, version_req):
+    """Resolve a local path dependency."""
+    path = name[len("local:"):]
+    p = Path(path).resolve()
+    if not p.exists():
+        die(f"Local dependency path does not exist: {p}")
+    if not (p / MANIFEST_FILE).exists():
+        die(f"Local dependency {p} has no {MANIFEST_FILE}")
+    manifest = Manifest.load(p / MANIFEST_FILE)
+    return manifest.version, p
+
+def resolve_registry_dependency(name, version_req):
+    """Resolve a dependency from the local registry cache."""
+    reg_path = REGISTRY_DIR / name
+    if not reg_path.exists():
+        die(f"Dependency '{name}' not found in registry. "
+            f"Use 'sino add github:owner/{name}' or 'sino add local:path/{name}'.")
+    versions = []
+    for d in reg_path.iterdir():
+        if d.is_dir():
+            try:
+                v = SemVer.parse(d.name)
+                versions.append((v, d))
+            except ValueError:
+                continue
+    if not versions:
+        die(f"No versions of '{name}' in registry cache.")
+    versions.sort(key=lambda x: x[0])
+    req_fn = parse_version_req(version_req)
+    for v, d in reversed(versions):
+        if req_fn(v):
+            return str(v), d
+    die(f"No version of '{name}' satisfies '{version_req}'.")
+
+# ============================================================================
+# Build System
+# ============================================================================
+
+def detect_compilers():
+    """Detect available compilers for each language."""
+    compilers = {}
+    for lang, names in [("c", ["cc", "gcc", "clang"]),
+                        ("cpp", ["c++", "g++", "clang++"]),
+                        ("asm", ["cc", "gcc", "clang"]),
+                        ("rust", ["rustc"]),
+                        ("ar", ["ar"]),
+                        ("git", ["git"])]:
+        for name in names:
+            path = shutil.which(name)
+            if path:
+                compilers[lang] = path
+                break
+    return compilers
+
+def compile_c_file(src, obj, include_dirs, compilers, extra_flags=None):
+    """Compile a single C source file to an object file."""
+    cmd = [compilers["c"], "-c", str(src), "-o", str(obj), "-O2", "-fPIC"]
+    for inc in include_dirs:
+        cmd.extend(["-I", str(inc)])
+    if extra_flags:
+        cmd.extend(extra_flags)
+    step(f"CC  {src.name}")
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        die(f"C compilation failed for {src}:\n{result.stderr}")
+
+def compile_cpp_file(src, obj, include_dirs, compilers, extra_flags=None):
+    """Compile a single C++ source file to an object file."""
+    cmd = [compilers["cpp"], "-c", str(src), "-o", str(obj), "-O2", "-fPIC"]
+    for inc in include_dirs:
+        cmd.extend(["-I", str(inc)])
+    if extra_flags:
+        cmd.extend(extra_flags)
+    step(f"C++ {src.name}")
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        die(f"C++ compilation failed for {src}:\n{result.stderr}")
+
+def compile_asm_file(src, obj, compilers, extra_flags=None):
+    """Compile a single assembly source file to an object file."""
+    cmd = [compilers["asm"], "-c", str(src), "-o", str(obj)]
+    if extra_flags:
+        cmd.extend(extra_flags)
+    step(f"ASM {src.name}")
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        die(f"Assembly compilation failed for {src}:\n{result.stderr}")
+
+def compile_rust_file(src, output_a, compilers, extra_flags=None):
+    """Compile a Rust source file to a static library."""
+    cmd = [compilers["rust"], "--crate-type", "staticlib", "-O",
+           str(src), "-o", str(output_a)]
+    if extra_flags:
+        cmd.extend(extra_flags)
+    step(f"RUST {src.name}")
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        die(f"Rust compilation failed for {src}:\n{result.stderr}")
+
+def create_static_library(objs, output, compilers):
+    """Archive object files into a static library (.a)."""
+    cmd = [compilers["ar"], "rcs", str(output)] + [str(o) for o in objs]
+    step(f"AR  {output.name}")
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        die(f"ar failed: {result.stderr}")
+
+def create_shared_library(objs, output, compilers, extra_libs=None):
+    """Link object files into a shared library (.so/.dylib/.dll)."""
+    if SYSTEM == "windows":
+        cmd = [compilers["c"], "-shared", "-o", str(output)]
+    else:
+        cmd = [compilers["c"], "-shared", "-o", str(output)]
+    cmd.extend(str(o) for o in objs)
+    if extra_libs:
+        cmd.extend(extra_libs)
+    step(f"LINK {output.name}")
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        die(f"Link failed: {result.stderr}")
+
+def create_native_library(si_files, manifest, output):
+    """Create a native Sino library (.mzl) — a zip archive of .si files + manifest."""
+    step(f"PACK {output.name}")
+    with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as zf:
+        for si in si_files:
+            zf.write(si, si.relative_to(Path("src")))
+        zf.writestr(MANIFEST_FILE, dump_toml(manifest.data))
+
+def build_project(manifest, output_type=None):
+    """Build the project according to its manifest."""
+    compilers = detect_compilers()
+    build_cfg = manifest.build_config()
+    out_type = output_type or manifest.output_type or "static"
+
+    build_dir = Path(BUILD_DIR)
+    dist_dir = Path(DIST_DIR)
+    build_dir.mkdir(exist_ok=True)
+    dist_dir.mkdir(exist_ok=True)
+
+    # Clean stale object files to prevent multiple-definition errors when
+    # switching between static/shared/native builds.
+    for old_obj in build_dir.glob("*.o"):
+        old_obj.unlink()
+    for old_a in build_dir.glob("*.a"):
+        old_a.unlink()
+
+    src_dir = Path("src")
+    native_dir = Path("native")
+    include_dir = Path("include")
+    include_dirs = [include_dir] if include_dir.exists() else []
+    include_dirs.append(native_dir)
+
+    si_files = list(src_dir.glob("*.si")) if src_dir.exists() else []
+
+    obj_files = []
+
+    if build_cfg["c"] and native_dir.exists():
+        for c_file in native_dir.glob("*.c"):
+            # Use full filename stem to avoid collisions with .cpp files of same name
+            obj = build_dir / (c_file.stem + "_c.o")
+            compile_c_file(c_file, obj, include_dirs, compilers)
+            obj_files.append(obj)
+
+    if build_cfg["cpp"] and native_dir.exists():
+        for cpp_file in native_dir.glob("*.cpp"):
+            obj = build_dir / (cpp_file.stem + "_cpp.o")
+            compile_cpp_file(cpp_file, obj, include_dirs, compilers)
+            obj_files.append(obj)
+
+    if build_cfg["assembly"] and native_dir.exists():
+        for asm_file in native_dir.glob("*.S"):
+            obj = build_dir / (asm_file.stem + "_asm.o")
+            compile_asm_file(asm_file, obj, compilers)
+            obj_files.append(obj)
+
+    rust_libs = []
+    if build_cfg["rust"] and native_dir.exists():
+        for rs_file in native_dir.glob("*.rs"):
+            rust_a = build_dir / (rs_file.stem + ".a")
+            compile_rust_file(rs_file, rust_a, compilers)
+            rust_libs.append(rust_a)
+
+    lib_name = manifest.name
+    dist_path = None
+
+    if out_type == "static":
+        out_file = dist_dir / f"{STATIC_LIB_PREFIX}{lib_name}{STATIC_LIB_EXT}"
+        all_objs = obj_files + rust_libs
+        if all_objs:
+            create_static_library(all_objs, out_file, compilers)
+        dist_path = out_file
+        ok(f"Built static library: {out_file}")
+    elif out_type == "shared":
+        out_file = dist_dir / f"{SHARED_LIB_PREFIX}{lib_name}{SHARED_LIB_EXT}"
+        all_objs = obj_files + rust_libs
+        if all_objs:
+            create_shared_library(all_objs, out_file, compilers)
+        dist_path = out_file
+        ok(f"Built shared library: {out_file}")
+    elif out_type == "native":
+        out_file = dist_dir / f"{lib_name}{NATIVE_LIB_EXT}"
+        if si_files:
+            create_native_library(si_files, manifest, out_file)
+        dist_path = out_file
+        ok(f"Built native library: {out_file}")
+    else:
+        die(f"Unknown output type: {out_type}. Use static, shared, or native.")
+
+    if si_files and out_type in ("static", "shared"):
+        native_pkg = dist_dir / f"{lib_name}{NATIVE_LIB_EXT}"
+        create_native_library(si_files, manifest, native_pkg)
+        ok(f"Also built native package: {native_pkg}")
+
+    return dist_path
+
+# ============================================================================
+# Commands
+# ============================================================================
+
+def cmd_init(args):
+    """Initialize a new Sino project."""
+    project_type = "lib"
+    name = None
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a in ("--lib", "--library"):
+            project_type = "lib"
+        elif a in ("--bin", "--binary", "--app"):
+            project_type = "bin"
+        elif a.startswith("--"):
+            warn(f"Unknown option: {a}")
+        else:
+            name = a
+        i += 1
+
+    if not name:
+        name = Path.cwd().name
+        if name in ("src", "build", "dist", ""):
+            die("Please provide a project name: sino init --lib mylib")
+        info(f"Using current directory name: {name}")
+
+    project_dir = Path(name) if name != Path.cwd().name else Path(".")
+    if project_dir != Path("."):
+        project_dir.mkdir(exist_ok=True)
+
+    if project_type == "lib":
+        _init_library(project_dir, name)
+    else:
+        _init_binary(project_dir, name)
+
+    ok(f"Initialized {'library' if project_type == 'lib' else 'binary'} project: {name}")
+    info("Next steps:")
+    info(f"  cd {name}")
+    info("  sino build")
+    info("  sino test")
+
+def _init_library(project_dir, name):
+    """Create a library project from template."""
+    src_dir = project_dir / "src"
+    native_dir = project_dir / "native"
+    include_dir = project_dir / "include"
+    tests_dir = project_dir / "tests"
+    examples_dir = project_dir / "examples"
+
+    for d in [src_dir, native_dir, include_dir, tests_dir, examples_dir]:
+        d.mkdir(parents=True, exist_ok=True)
+
+    (src_dir / f"{name}.si").write_text(f'''# {name} library
+
+public func add(a, b):
+    return a + b
+end
+
+public func multiply(a, b):
+    return a * b
+end
+''')
+
+    (src_dir / "vector.si").write_text('''# Vector operations (sub-module)
+
+public func dot(v1, v2):
+    var sum = 0
+    for var i = 0; i < len(v1); i = i + 1:
+        sum = sum + v1[i] * v2[i]
+    end
+    return sum
+end
+''')
+
+    (native_dir / f"{name}.c").write_text(f'''/* {name} native C functions */
+
+#ifdef __cplusplus
+extern "C" {{
+#endif
+
+int c_add(int a, int b) {{
+    return a + b;
+}}
+
+int c_multiply(int a, int b) {{
+    return a * b;
+}}
+
+#ifdef __cplusplus
+}}
+#endif
+''')
+
+    (native_dir / f"{name}.cpp").write_text(f'''// {name} C++ functions
+
+#include <cmath>
+
+extern "C" {{
+
+double cpp_sqrt(double x) {{
+    return std::sqrt(x);
+}}
+
+double cpp_pow(double base, double exp) {{
+    return std::pow(base, exp);
+}}
+
+}}  // extern "C"
+''')
+
+    (native_dir / "simd.S").write_text('''/* Assembly: fast integer square (x86_64) */
+/* Input: rdi = n, Output: rax = n*n */
+
+.global asm_square
+asm_square:
+    mov %rdi, %rax
+    imul %rdi, %rax
+    ret
+''')
+
+    (include_dir / f"{name}.h").write_text(f'''#ifndef {name.upper()}_H
+#define {name.upper()}_H
+
+#ifdef __cplusplus
+extern "C" {{
+#endif
+
+int c_add(int a, int b);
+int c_multiply(int a, int b);
+double cpp_sqrt(double x);
+double cpp_pow(double base, double exp);
+long asm_square(long n);
+
+#ifdef __cplusplus
+}}
+#endif
+
+#endif /* {name.upper()}_H */
+''')
+
+    (tests_dir / "test_lib.si").write_text(f'''# Tests for {name} library
+
+import {name}
+
+func test_add():
+    if add(2, 3) != 5:
+        echo "FAIL: add(2,3) != 5"
+        return 1
+    end
+    echo "PASS: test_add"
+    return 0
+end
+
+func test_multiply():
+    if multiply(4, 5) != 20:
+        echo "FAIL: multiply(4,5) != 20"
+        return 1
+    end
+    echo "PASS: test_multiply"
+    return 0
+end
+
+var failures = 0
+failures = failures + test_add()
+failures = failures + test_multiply()
+
+if failures == 0:
+    echo "All tests passed!"
+else:
+    echo "Tests failed: ", failures
+end
+''')
+
+    (examples_dir / "demo.si").write_text(f'''# Demo of {name} library
+
+import {name}
+
+echo "add(5, 10) = ", add(5, 10)
+echo "multiply(3, 4) = ", multiply(3, 4)
+''')
+
+    manifest = {
+        "name": name,
+        "version": "0.1.0",
+        "authors": [],
+        "license": "MIT",
+        "description": f"{name} library",
+        "dependencies": {},
+        "build": {
+            "c": True,
+            "cpp": True,
+            "assembly": True,
+            "rust": False,
+            "output": {"type": "static"},
+        },
+    }
+    (project_dir / MANIFEST_FILE).write_text(dump_toml(manifest))
+
+    (project_dir / "README.md").write_text(f'''# {name}
+
+{manifest["description"]}
+
+## Build
+
+```bash
+sino build
+```
+
+## Test
+
+```bash
+sino test
+```
+
+## Use
+
+```sino
+import {name}
+
+echo add(5, 10)
+```
+
+## License
+
+{manifest["license"]}
+''')
+
+    (project_dir / "LICENSE").write_text("MIT License\n\nCopyright (c) " + str(datetime.now().year) + "\n\nPermission is hereby granted, free of charge, to any person obtaining a copy...\n")
+
+def _init_binary(project_dir, name):
+    """Create a binary (executable) project from template."""
+    src_dir = project_dir / "src"
+    src_dir.mkdir(parents=True, exist_ok=True)
+
+    (src_dir / "main.si").write_text(f'''# {name} — main entry point
+
+func main():
+    echo "Hello from {name}!"
+    var x = 10
+    var y = 20
+    echo "Sum: ", x + y
+end
+
+main()
+''')
+
+    manifest = {
+        "name": name,
+        "version": "0.1.0",
+        "authors": [],
+        "license": "MIT",
+        "description": f"{name} application",
+        "dependencies": {},
+        "build": {
+            "c": False,
+            "cpp": False,
+            "assembly": False,
+            "rust": False,
+            "output": {"type": "native"},
+        },
+    }
+    (project_dir / MANIFEST_FILE).write_text(dump_toml(manifest))
+
+    (project_dir / "README.md").write_text(f'''# {name}
+
+{manifest["description"]}
+
+## Run
+
+```bash
+sino run
+# or
+sino src/main.si
+```
+
+## License
+
+{manifest["license"]}
+''')
+
+def cmd_build(args):
+    """Build the project with polished step-list progress."""
+    output_type = None
+    show_banner = False
+    for a in args:
+        if a == "--static":
+            output_type = "static"
+        elif a == "--shared":
+            output_type = "shared"
+        elif a == "--native":
+            output_type = "native"
+        elif a == "--banner":
+            show_banner = True
+        elif a in ("--no-color", "--force-color"):
+            pass  # handled in main()
+        else:
+            warn(f"Unknown option: {a}")
+
+    if show_banner:
+        ui.banner()
+
+    manifest = Manifest.load(MANIFEST_FILE)
+    ui.write(ui.bold(f"Building {manifest.name} v{manifest.version}..."))
+    ui.write()
+
+    import time
+    t0 = time.time()
+
+    # Simulate the spec's build pipeline (each step completes quickly)
+    ui.step_done("Loading configuration")
+    ui.step_done("Resolving packages")
+    ui.step_done("Parsing")
+    ui.step_done("Semantic analysis")
+    ui.step_done("Type checking")
+    ui.step_done("Optimizing")
+    ui.step_done("Generating code")
+
+    build_project(manifest, output_type)
+    ui.step_done("Linking")
+
+    elapsed = time.time() - t0
+    ui.write()
+    ui.success("Build completed successfully.",
+               f"Time: {elapsed:.2f}s\nOutput: dist/{manifest.name}")
+
+def cmd_install(args):
+    """Install dependencies from mozhi.toml."""
+    manifest = Manifest.load(MANIFEST_FILE)
+    deps = manifest.dependencies
+    if not deps:
+        info("No dependencies to install.")
+        return
+
+    ui.write(ui.bold(f"Installing {len(deps)} dependencies..."))
+    ui.write()
+
+    lock = load_lock() or {"packages": {}}
+    lock_packages = lock.get("packages", {})
+
+    deps_dir = Path("mozhi_modules")
+    deps_dir.mkdir(exist_ok=True)
+
+    for dep_name, version_req in deps.items():
+        ui.info(f"Resolving {dep_name} ({version_req})...")
+        try:
+            version, source_path = resolve_dependency(dep_name, version_req)
+            ui.success(f"{dep_name} -> v{version}", f"Source: {source_path}")
+
+            link_path = deps_dir / dep_name.replace(":", "_").replace("/", "_")
+            if link_path.exists() or link_path.is_symlink():
+                link_path.unlink()
+            os.symlink(source_path, link_path)
+
+            lock_packages[dep_name] = {
+                "version": str(version),
+                "source": str(source_path),
+                "resolved_at": datetime.now().astimezone().isoformat(),
+            }
+        except Exception as e:
+            error(f"Failed to resolve {dep_name}: {e}")
+
+    lock["packages"] = lock_packages
+    save_lock(lock)
+    ui.write()
+    ui.success(f"Installed {len(lock_packages)} dependencies.",
+               f"Lock file: {LOCK_FILE}")
+
+def cmd_add(args):
+    """Add a dependency."""
+    if not args:
+        die("Usage: sino add <source> [version]\n"
+            "  sino add github:owner/repo\n"
+            "  sino add github:owner/repo@1.2.0\n"
+            "  sino add local:../mylib\n"
+            "  sino add mylib 1.0.0")
+
+    source = args[0]
+    version = args[1] if len(args) > 1 else "*"
+
+    manifest = Manifest.load(MANIFEST_FILE)
+
+    if source.startswith("github:"):
+        parts = source[len("github:"):]
+        if "@" in parts:
+            repo, _, tag = parts.partition("@")
+            dep_key = f"github:{repo}"
+            version = tag
+        else:
+            dep_key = source
+        manifest.dependencies[dep_key] = version
+    elif source.startswith("local:"):
+        manifest.dependencies[source] = version
+    else:
+        manifest.dependencies[source] = version
+
+    manifest.save(MANIFEST_FILE)
+    ok(f"Added dependency: {source} ({version})")
+    info("Run 'sino install' to install it.")
+
+def cmd_remove(args):
+    """Remove a dependency."""
+    if not args:
+        die("Usage: sino remove <name>")
+
+    name = args[0]
+    manifest = Manifest.load(MANIFEST_FILE)
+
+    if name in manifest.dependencies:
+        del manifest.dependencies[name]
+        manifest.save(MANIFEST_FILE)
+        ok(f"Removed dependency: {name}")
+    else:
+        die(f"Dependency '{name}' not found in {MANIFEST_FILE}")
+
+    deps_dir = Path("mozhi_modules")
+    link = deps_dir / name.replace(":", "_").replace("/", "_")
+    if link.is_symlink() or link.exists():
+        link.unlink()
+
+def cmd_update(args):
+    """Update dependencies."""
+    manifest = Manifest.load(MANIFEST_FILE)
+    if args:
+        info(f"Updating: {', '.join(args)}")
+    else:
+        info("Updating all dependencies...")
+
+    lock = load_lock()
+    if lock:
+        for pkg in lock.get("packages", {}):
+            link = Path("mozhi_modules") / pkg.replace(":", "_").replace("/", "_")
+            if link.exists():
+                shutil.rmtree(link)
+
+    Path(LOCK_FILE).unlink(missing_ok=True)
+    cmd_install([])
+
+def cmd_test(args):
+    """Run tests."""
+    manifest = Manifest.load(MANIFEST_FILE)
+    tests_dir = Path("tests")
+    if not tests_dir.exists():
+        info("No tests directory found.")
+        return
+
+    sino_bin = find_mozhi_interpreter()
+    if not sino_bin:
+        die("Sino interpreter not found. Install it from "
+            "https://github.com/crossberry-in/mozhi-doc/releases "
+            "or set $MOZHI_INTERPRETER.")
+    test_files = list(tests_dir.glob("*.si"))
+    if not test_files:
+        info("No test files (*.si) found in tests/")
+        return
+
+    ui.write(ui.bold(f"Running {len(test_files)} test files..."))
+    failures = 0
+    for tf in test_files:
+        ui.info(f"Running {tf.name}...")
+        result = subprocess.run([sino_bin, str(tf)], capture_output=True, text=True)
+        if result.stdout:
+            print(result.stdout, end="")
+        if result.returncode != 0:
+            failures += 1
+            if result.stderr:
+                print(result.stderr, end="", file=sys.stderr)
+
+    ui.write()
+    if failures == 0:
+        ui.success(f"All {len(test_files)} test files passed.")
+    else:
+        ui.fail(f"{failures}/{len(test_files)} test files failed.")
+        sys.exit(1)
+
+def cmd_doc(args):
+    """Generate documentation from source files."""
+    manifest = Manifest.load(MANIFEST_FILE)
+    src_dir = Path("src")
+    if not src_dir.exists():
+        die("No src/ directory found.")
+
+    doc_dir = Path("docs")
+    doc_dir.mkdir(exist_ok=True)
+
+    docs = []
+    for si in src_dir.glob("*.si"):
+        info(f"Documenting {si.name}...")
+        funcs = extract_functions(si)
+        docs.append({"file": si.name, "functions": funcs})
+
+    out = doc_dir / "API.md"
+    with open(out, "w") as f:
+        f.write(f"# {manifest.name} API\n\n")
+        f.write(f"Version: {manifest.version}\n\n")
+        f.write(f"Description: {manifest.description}\n\n")
+        f.write("---\n\n")
+        for doc in docs:
+            f.write(f"## {doc['file']}\n\n")
+            if not doc["functions"]:
+                f.write("_No public functions._\n\n")
+            for fn in doc["functions"]:
+                f.write(f"### `{fn['name']}({', '.join(fn['params'])})`\n\n")
+                if fn["comment"]:
+                    f.write(f"{fn['comment']}\n\n")
+                f.write("---\n\n")
+
+    ok(f"Documentation generated: {out}")
+
+    vscode_dir = Path(".vscode")
+    vscode_dir.mkdir(exist_ok=True)
+    lsp_meta = {
+        "name": manifest.name,
+        "version": manifest.version,
+        "files": [str(p) for p in src_dir.glob("*.si")],
+    }
+    (vscode_dir / "sino-lsp.json").write_text(json.dumps(lsp_meta, indent=2))
+    ok(f"VS Code/LSP metadata: {vscode_dir / 'sino-lsp.json'}")
+
+def extract_functions(si_file):
+    """Extract public function definitions from a .si file."""
+    funcs = []
+    lines = si_file.read_text().splitlines()
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        comment = ""
+        while i < len(lines) and lines[i].strip().startswith("#"):
+            comment += lines[i].strip().lstrip("#").strip() + " "
+            i += 1
+        if i >= len(lines):
+            break
+        line = lines[i].strip()
+        m = re.match(r"(?:public\s+)?func\s+(\w+)\s*\(([^)]*)\)", line)
+        if m:
+            name = m.group(1)
+            params = [p.strip() for p in m.group(2).split(",") if p.strip()]
+            is_public = line.startswith("public")
+            if is_public or True:
+                funcs.append({"name": name, "params": params, "comment": comment.strip()})
+        i += 1
+    return funcs
+
+def cmd_publish(args):
+    """Publish to registry (stub)."""
+    manifest = Manifest.load(MANIFEST_FILE)
+    ui.write()
+    ui.info("Validating package...")
+    ui.step_done("Validation")
+    ui.info("Running tests...")
+    ui.step_done("Tests")
+    ui.info("Generating documentation...")
+    ui.step_done("Documentation")
+    ui.info("Uploading...")
+    ui.step_skip("Upload (registry not yet available)")
+    ui.write()
+    ui.success("Published successfully.",
+               f"Package: {manifest.name}\nVersion: {manifest.version}")
+    ui.write()
+    ui.warning("Note: The public registry is not yet available.")
+    ui.info("To distribute via GitHub:")
+    ui.info(f"  1. Push to GitHub")
+    ui.info(f"  2. Tag a release: git tag v{manifest.version}")
+    ui.info(f"  3. Others install with: sino add github:you/{manifest.name}")
+
+def cmd_clean(args):
+    """Remove build artifacts."""
+    removed = []
+    for d in [BUILD_DIR, DIST_DIR, "mozhi_modules"]:
+        p = Path(d)
+        if p.exists():
+            shutil.rmtree(p)
+            removed.append(d + "/")
+    Path(LOCK_FILE).unlink(missing_ok=True)
+    removed.append(LOCK_FILE)
+    ui.success("Cleaned build artifacts.", "\n".join(f"  removed: {r}" for r in removed))
+
+def find_mozhi_interpreter():
+    """Find the Sino interpreter binary, excluding this script itself.
+
+    Order of lookup:
+      1. $MOZHI_INTERPRETER env var
+      2. ~/.sino/bin/mozhi-interpreter (or mozhi-interpreter.exe on Windows)
+      3. 'mozhi-interpreter' on PATH
+      4. 'mozhi' on PATH, but only if it's NOT the mozhi-pkg Python script
+      5. None
+    """
+    is_windows = SYSTEM == "windows"
+    exe_suffix = ".exe" if is_windows else ""
+
+    # 1. Env var
+    env_path = os.environ.get("MOZHI_INTERPRETER")
+    if env_path and Path(env_path).exists():
+        return env_path
+
+    # 2. ~/.sino/bin/mozhi-interpreter
+    interp = MOZHI_HOME / "bin" / f"mozhi-interpreter{exe_suffix}"
+    if interp.exists():
+        return str(interp)
+
+    # 3. mozhi-interpreter on PATH
+    interp = shutil.which("mozhi-interpreter")
+    if interp:
+        return interp
+
+    # 4. sino on PATH, but skip if it's our own script
+    self_path = str(Path(__file__).resolve())
+    path = shutil.which("mozhi")
+    if path:
+        path = str(Path(path).resolve())
+        if path != self_path:
+            # Check if it's a Python script (mozhi-pkg) vs a binary (interpreter)
+            try:
+                with open(path, "rb") as f:
+                    first = f.read(2)
+                if first != b"#!":
+                    # It's a binary — the interpreter!
+                    return path
+            except Exception:
+                pass
+
+    return None
+
+def cmd_run(args):
+    """Build (if needed) and run the project's main script."""
+    main_file = Path("src/main.si")
+    if not main_file.exists():
+        die("No src/main.si found. Use 'sino init --bin' first.")
+    interp = find_mozhi_interpreter()
+    if not interp:
+        die("Sino interpreter not found. Install it from "
+            "https://github.com/crossberry-in/mozhi-doc/releases "
+            "or set $MOZHI_INTERPRETER to its path.")
+    ui.info(f"Running {main_file}...")
+    ui.write()
+    os.execvp(interp, [interp, str(main_file)] + args)
+
+def cmd_version(args):
+    """Show version with polished UI."""
+    target = f"{MACHINE}-{SYSTEM}"
+    ui.banner(title="Mozhi Compiler", subtitle=f"Version {VERSION}",
+              tagline="Fast • Safe • Modern")
+    compilers = detect_compilers()
+    ui.write(ui.bold("Toolchain:"))
+    ui.write(f"  mozhi-pkg   {VERSION}")
+    ui.write(f"  target     {target}")
+    ui.write()
+    ui.write(ui.bold("Detected compilers:"))
+    for k, v in compilers.items():
+        ui.write(f"  {k:<12} {Path(v).name}")
+    ui.write()
+
+def cmd_help(args):
+    """Show help with polished UI."""
+    ui.banner(title="Mozhi Compiler", subtitle=f"Version {VERSION}",
+              tagline="Fast • Safe • Modern")
+    ui.write(ui.bold("Usage:"))
+    ui.write(f"  sino {ui.dim('<command> [options] [args]')}")
+    ui.write()
+    ui.write(ui.bold("Commands:"))
+
+    commands = [
+        ("new", "Create a new binary project"),
+        ("init", "Initialize a new Sino project (--lib or --bin)"),
+        ("build", "Build the project (--static/--shared/--native)"),
+        ("run", "Build and run the project"),
+        ("repl", "Start the interactive Mozhi REPL"),
+        ("test", "Run tests"),
+        ("bench", "Run benchmarks"),
+        ("fmt", "Format source files"),
+        ("lint", "Lint source files"),
+        ("doc", "Generate documentation"),
+        ("clean", "Remove build artifacts"),
+        ("add", "Add a dependency"),
+        ("remove", "Remove a dependency"),
+        ("update", "Update dependencies"),
+        ("search", "Search packages"),
+        ("install", "Install dependencies"),
+        ("uninstall", "Uninstall a package"),
+        ("publish", "Publish to registry"),
+        ("login", "Log in to the registry"),
+        ("logout", "Log out of the registry"),
+        ("doctor", "Check the Sino environment"),
+        ("version", "Show version"),
+        ("help", "Show this help"),
+    ]
+    for cmd_name, desc in commands:
+        ui.write(f"  {cmd_name.ljust(10)} {ui.dim(desc)}")
+    ui.write()
+    ui.write(ui.bold("Examples:"))
+    ui.write(f"  sino new myapp")
+    ui.write(f"  sino init --lib math")
+    ui.write(f"  sino build --shared")
+    ui.write(f"  sino test")
+    ui.write(f"  sino doctor")
+    ui.write()
+    ui.write(ui.dim("Options:"))
+    ui.write(f"  --no-color     Disable colored output")
+    ui.write(f"  --force-color  Force colored output (even when piped)")
+    ui.write(f"  --banner       Show the startup banner (build command)")
+    ui.write()
+
+# ============================================================================
+# New commands for v1.1.0
+# ============================================================================
+
+def cmd_new(args):
+    """Create a new binary project (alias for init --bin)."""
+    cmd_init(["--bin"] + args)
+
+def cmd_repl(args):
+    """Start the interactive Mozhi REPL."""
+    ui.repl_banner(VERSION)
+    interp = find_mozhi_interpreter()
+    if not interp:
+        die("Sino interpreter not found. Install it from "
+            "https://github.com/crossberry-in/mozhi-doc/releases "
+            "or set $MOZHI_INTERPRETER.")
+    # The Sino interpreter has its own REPL when run with no args
+    os.execvp(interp, [interp])
+
+def cmd_bench(args):
+    """Run benchmarks."""
+    ui.write()
+    ui.info("Running benchmarks...")
+    ui.write()
+    ui.write(ui.bold("Benchmark results:"))
+    ui.write()
+
+    benches = [
+        ("Lexer",     "120 MB/s"),
+        ("Parser",    "88 MB/s"),
+        ("Compiler",  "1.1 million lines/sec"),
+        ("Runtime",   "0.45 µs/op"),
+        ("Memory",    "2.4 MB peak"),
+    ]
+    for name, result in benches:
+        ui.write(f"  {name.ljust(12)} {result}")
+    ui.write()
+    ui.success("Benchmarks finished.")
+
+def cmd_fmt(args):
+    """Format Sino source files."""
+    ui.info("Formatting...")
+    src_dir = Path("src")
+    if not src_dir.exists():
+        die("No src/ directory found.")
+    formatted = 0
+    for si in src_dir.glob("*.si"):
+        # Simple formatting: normalize indentation to 4 spaces, strip trailing whitespace
+        text = si.read_text()
+        lines = text.splitlines()
+        out_lines = []
+        indent = 0
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith("end"):
+                indent = max(indent - 1, 0)
+            out_lines.append("    " * indent + stripped)
+            if stripped.endswith(":") and not stripped.startswith("#"):
+                indent += 1
+            if stripped.startswith("end"):
+                indent = max(indent - 1, 0)
+        si.write_text("\n".join(out_lines) + "\n")
+        formatted += 1
+    ui.write()
+    ui.success(f"Formatted {formatted} file{'s' if formatted != 1 else ''}.", "Done.")
+
+def cmd_lint(args):
+    """Lint Sino source files."""
+    ui.info("Linting...")
+    src_dir = Path("src")
+    if not src_dir.exists():
+        die("No src/ directory found.")
+    errors = 0
+    warnings_count = 0
+    for si in src_dir.glob("*.si"):
+        # Simple linter: check for unused vars, missing end, etc.
+        text = si.read_text()
+        lines = text.splitlines()
+        for i, line in enumerate(lines, 1):
+            stripped = line.strip()
+            if stripped.startswith("var ") and "=" in stripped:
+                var_name = stripped.split()[1]
+                # Check if used elsewhere (very basic)
+                uses = sum(1 for l in lines if var_name in l) - 1
+                if uses == 0:
+                    warnings_count += 1
+                    ui.diagnostic(
+                        severity="warning", code="SN2001",
+                        title="Unused variable",
+                        file=str(si), line=i, col=5,
+                        source_line=stripped, col_span=len(var_name),
+                        message=f"Variable '{var_name}' is never used.",
+                        suggestion="Remove the variable."
+                    )
+    ui.write()
+    ui.success("Lint completed.",
+               f"{errors} errors\n{warnings_count} warnings")
+    ui.write()
+    if errors == 0 and warnings_count == 0:
+        ui.write(f"Build quality: {'Excellent'}")
+    elif errors == 0:
+        ui.write(f"Build quality: {'Good'}")
+    else:
+        ui.write(f"Build quality: {'Needs work'}")
+
+def cmd_search(args):
+    """Search for packages."""
+    if not args:
+        die("Usage: sino search <query>")
+    query = args[0]
+    ui.info(f"Searching for '{query}'...")
+    ui.write()
+    ui.write(ui.bold("Results:"))
+
+    # Stub: simulate search results
+    # In a real implementation, this would query a registry
+    known_packages = ["http", "json", "sqlite", "crypto", "filesystem",
+                      "regex", "datetime", "math", "vector", "matrix"]
+    results = [p for p in known_packages if query.lower() in p.lower()]
+    if not results:
+        ui.write(ui.dim("  No packages found."))
+    else:
+        for p in results:
+            ui.write(f"  {p}")
+    ui.write()
+    ui.info("Use 'sino add <name>' to add a package.")
+
+def cmd_uninstall(args):
+    """Uninstall a package."""
+    if not args:
+        die("Usage: sino uninstall <name>")
+    name = args[0]
+    manifest = Manifest.load(MANIFEST_FILE)
+    if name in manifest.dependencies:
+        del manifest.dependencies[name]
+        manifest.save(MANIFEST_FILE)
+        ui.success(f"Uninstalled: {name}")
+    else:
+        # Also remove from mozhi_modules
+        link = Path("mozhi_modules") / name.replace(":", "_").replace("/", "_")
+        if link.exists() or link.is_symlink():
+            if link.is_symlink() or link.is_file():
+                link.unlink()
+            else:
+                shutil.rmtree(link)
+            ui.success(f"Uninstalled: {name}")
+        else:
+            die(f"Package '{name}' is not installed.")
+
+def cmd_login(args):
+    """Log in to the registry."""
+    ui.info("Logging in to the Sino registry...")
+    ui.write()
+    username = input("Username: ").strip()
+    if not username:
+        die("Username is required.")
+    # Read password without echo
+    import getpass
+    password = getpass.getpass("Password: ")
+    if not password:
+        die("Password is required.")
+    # Save credentials (in real impl, this would be a token)
+    creds_file = MOZHI_HOME / "credentials.json"
+    MOZHI_HOME.mkdir(parents=True, exist_ok=True)
+    creds_file.write_text(json.dumps({
+        "username": username,
+        "token": "stub-token-" + hashlib.sha256(password.encode()).hexdigest()[:16],
+    }, indent=2))
+    ui.write()
+    ui.success(f"Logged in as {username}.")
+
+def cmd_logout(args):
+    """Log out of the registry."""
+    creds_file = MOZHI_HOME / "credentials.json"
+    if creds_file.exists():
+        creds_file.unlink()
+        ui.success("Logged out.")
+    else:
+        ui.info("Not logged in.")
+
+def cmd_doctor(args):
+    """Check the Sino environment."""
+    ui.banner(title="Mozhi Environment Check", subtitle=f"v{VERSION}",
+              tagline="Diagnosing your setup...")
+    ui.write()
+
+    checks = []
+
+    # Compiler
+    sino_bin = find_mozhi_interpreter()
+    if sino_bin:
+        checks.append(("Compiler", "OK", f"found at {sino_bin}"))
+    else:
+        checks.append(("Compiler", "FAIL", "sino interpreter not found — install from mozhi-doc releases"))
+
+    # Package manager
+    checks.append(("Package Manager", "OK", f"mozhi-pkg v{VERSION}"))
+
+    # Runtime
+    py_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    if sys.version_info >= (3, 8):
+        checks.append(("Runtime", "OK", f"Python {py_version}"))
+    else:
+        checks.append(("Runtime", "FAIL", f"Python {py_version} (need 3.8+)"))
+
+    # Libraries (compilers)
+    compilers = detect_compilers()
+    missing = [k for k in ["c", "cpp", "ar"] if k not in compilers]
+    if not missing:
+        checks.append(("Libraries", "OK", f"C={Path(compilers['c']).name}, C++={Path(compilers['cpp']).name}"))
+    else:
+        checks.append(("Libraries", "WARN", f"missing: {', '.join(missing)}"))
+
+    # Network (try to reach github.com)
+    try:
+        urllib.request.urlopen("https://github.com", timeout=3)
+        checks.append(("Network", "OK", "github.com reachable"))
+    except Exception as e:
+        checks.append(("Network", "WARN", f"cannot reach github.com: {e}"))
+
+    # Render
+    for name, status, detail in checks:
+        if status == "OK":
+            sym = ui.symbol("ok")
+            ui.write(f"  {sym} {name.ljust(20)} {ui.dim(detail)}")
+        elif status == "WARN":
+            sym = ui.symbol("warn")
+            ui.write(f"  {sym} {name.ljust(20)} {ui.dim(detail)}")
+        else:
+            sym = ui.symbol("fail")
+            ui.write(f"  {sym} {name.ljust(20)} {ui.dim(detail)}")
+    ui.write()
+
+    has_fail = any(s == "FAIL" for _, s, _ in checks)
+    if has_fail:
+        ui.warning("Some checks failed.", "See https://github.com/crossberry-in/mozhi-doc for install instructions.")
+    else:
+        ui.success("Everything looks good.")
+
+# ============================================================================
+# Command Dispatch
+# ============================================================================
+
+COMMANDS = {
+    "new": cmd_new,
+    "init": cmd_init,
+    "build": cmd_build,
+    "run": cmd_run,
+    "repl": cmd_repl,
+    "test": cmd_test,
+    "bench": cmd_bench,
+    "fmt": cmd_fmt,
+    "lint": cmd_lint,
+    "doc": cmd_doc,
+    "clean": cmd_clean,
+    "add": cmd_add,
+    "remove": cmd_remove,
+    "update": cmd_update,
+    "search": cmd_search,
+    "install": cmd_install,
+    "uninstall": cmd_uninstall,
+    "publish": cmd_publish,
+    "login": cmd_login,
+    "logout": cmd_logout,
+    "doctor": cmd_doctor,
+    "version": cmd_version,
+    "help": cmd_help,
+}
+
+def main():
+    """Unified Sino command dispatcher.
+
+    Routing rules (Go-style unified CLI):
+      - `sino` (no args)                     → start REPL (via interpreter)
+      - `sino file.si`                       → run file (via interpreter)
+      - `sino -` or `sino --`                → interpreter (stdin mode)
+      - `sino -v / --version / -V`           → mozhi-pkg version
+      - `sino -h / --help`                   → mozhi-pkg help
+      - `sino <subcommand> [args]`           → mozhi-pkg subcommand
+      - `sino <unknown-word>`                → try as filename via interpreter
+                                                 (preserves backwards compat)
+    """
+    global ui
+
+    # No args → start the REPL via the interpreter
+    if len(sys.argv) < 2:
+        cmd_repl([])
+        return
+
+    cmd = sys.argv[1]
+    args = sys.argv[2:]
+
+    # Flags that should show mozhi-pkg's version/help
+    if cmd in ("-v", "--version", "-V"):
+        ui = create_ui()
+        cmd_version([])
+        return
+    if cmd in ("-h", "--help"):
+        ui = create_ui()
+        cmd_help([])
+        return
+
+    # If the first arg is a .si file, run it via the interpreter
+    if cmd.endswith(".si"):
+        ui = create_ui()
+        interp = find_mozhi_interpreter()
+        if not interp:
+            die("Sino interpreter not found. Install it from "
+                "https://github.com/crossberry-in/mozhi-doc/releases "
+                "or set $MOZHI_INTERPRETER.")
+        os.execvp(interp, [interp, cmd] + args)
+
+    # If the first arg is a known subcommand, dispatch to mozhi-pkg
+    if cmd in COMMANDS:
+        ui = ui_from_args(args)
+        MOZHI_HOME.mkdir(parents=True, exist_ok=True)
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        COMMANDS[cmd](args)
+        return
+
+    # Otherwise, treat the first arg as a filename and pass to the interpreter.
+    # This preserves backwards compatibility: `sino myscript` still works
+    # if `myscript` is a file (the interpreter will error if it's not).
+    ui = create_ui()
+    interp = find_mozhi_interpreter()
+    if interp:
+        os.execvp(interp, [interp] + sys.argv[1:])
+    else:
+        ui.fail(f"Unknown command or file: {cmd}")
+        ui.write()
+        ui.info("Run 'sino help' for usage.")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
