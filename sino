@@ -59,8 +59,49 @@ import urllib.error
 from pathlib import Path
 from datetime import datetime
 
-# Import the sino_ui module (same directory)
-sys.path.insert(0, str(Path(__file__).parent.resolve()))
+# Import the sino_ui module — look in same directory, then ~/.sino/bin/
+_ui_search_paths = [
+    Path(__file__).parent.resolve(),                       # same dir as this script
+    Path.home() / ".sino" / "bin",                          # user's sino bin dir
+    Path("/usr/local/lib/sino"),                            # system lib dir
+    Path("/usr/local/share/sino"),                          # system share dir
+]
+
+def _find_sino_ui():
+    """Find sino_ui.py in known locations. Returns the dir containing it, or None."""
+    for p in _ui_search_paths:
+        if (p / "sino_ui.py").exists():
+            return p
+    return None
+
+_ui_dir = _find_sino_ui()
+
+if _ui_dir is None:
+    # Auto-download sino_ui.py to ~/.sino/bin/
+    import urllib.request
+    _ui_url = "https://github.com/crossberry-in/sino-pkg/raw/main/sino_ui.py"
+    _target = Path.home() / ".sino" / "bin" / "sino_ui.py"
+    _target.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        urllib.request.urlretrieve(_ui_url, _target)
+        _ui_dir = _target.parent
+    except Exception:
+        # Last resort: print a helpful error and exit
+        import sys as _sys
+        _sys.stderr.write(
+            "Error: sino_ui.py module not found.\n\n"
+            "This usually means the sino dispatcher was installed without its\n"
+            "companion UI module. To fix:\n\n"
+            "  Option 1: Re-install sino-pkg (installs both files together):\n"
+            "    curl -fsSL https://github.com/crossberry-in/sino-pkg/raw/main/install.sh | bash\n\n"
+            "  Option 2: Download sino_ui.py manually:\n"
+            "    sudo curl -fsSL -o /usr/local/lib/sino/sino_ui.py \\\n"
+            "      https://github.com/crossberry-in/sino-pkg/raw/main/sino_ui.py\n"
+            "    sudo mkdir -p /usr/local/lib/sino\n\n"
+        )
+        _sys.exit(1)
+
+sys.path.insert(0, str(_ui_dir))
 from sino_ui import UI, create_ui, ui_from_args
 
 VERSION = "1.2.0"
