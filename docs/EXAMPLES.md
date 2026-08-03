@@ -1,21 +1,21 @@
 # Examples & Tutorials
 
-Step-by-step tutorials for using sino-pkg.
+Step-by-step tutorials for using mozhi-pkg.
 
 ---
 
-## Tutorial 1: Create a Pure Sino Library
+## Tutorial 1: Create a Pure Mozhi Library
 
 ### Step 1: Initialize
 
 ```bash
-sino init --lib greet
+mozhi init --lib greet
 cd greet
 ```
 
-### Step 2: Edit `src/greet.si`
+### Step 2: Edit `src/greet.mz`
 
-```sino
+```mozhi
 # Greet library
 
 public func hello(name):
@@ -30,7 +30,7 @@ end
 ### Step 3: Build
 
 ```bash
-sino build --native
+mozhi build --native
 ```
 
 Output:
@@ -42,9 +42,9 @@ Output:
 
 ### Step 4: Test
 
-Edit `tests/test_greet.si`:
+Edit `tests/test_greet.mz`:
 
-```sino
+```mozhi
 import greet
 
 func test_hello():
@@ -59,13 +59,13 @@ test_hello()
 Run:
 
 ```bash
-sino test
+mozhi test
 ```
 
 ### Step 5: Document
 
 ```bash
-sino doc
+mozhi doc
 ```
 
 View `docs/API.md`:
@@ -73,7 +73,7 @@ View `docs/API.md`:
 ```markdown
 # greet API
 
-## greet.si
+## greet.mz
 
 ### `hello(name)`
 
@@ -87,7 +87,7 @@ View `docs/API.md`:
 ### Step 1: Initialize
 
 ```bash
-sino init --lib fastmath
+mozhi init --lib fastmath
 cd fastmath
 ```
 
@@ -114,10 +114,10 @@ int fast_sum(int* arr, int n) {
 }
 ```
 
-### Step 3: Edit `src/fastmath.si`
+### Step 3: Edit `src/fastmath.mz`
 
-```sino
-# Fastmath library — Sino wrappers for C functions
+```mozhi
+# Fastmath library — Mozhi wrappers for C functions
 
 public func add(a, b):
     return c_add(a, b)
@@ -131,7 +131,7 @@ end
 ### Step 4: Build
 
 ```bash
-sino build --static
+mozhi build --static
 ```
 
 Output:
@@ -147,7 +147,7 @@ Output:
 ### Step 5: Build as Shared Library
 
 ```bash
-sino build --shared
+mozhi build --shared
 ```
 
 Output:
@@ -165,11 +165,11 @@ Output:
 ### Step 1: Create a Library and Push to GitHub
 
 ```bash
-sino init --lib myutils
+mozhi init --lib myutils
 cd myutils
 echo 'public func double(x):
     return x * 2
-end' > src/myutils.si
+end' > src/myutils.mz
 
 git init
 git add -A
@@ -184,17 +184,17 @@ git push origin v1.0.0
 
 ```bash
 cd ..
-sino init --bin myapp
+mozhi init --bin myapp
 cd myapp
 ```
 
 ### Step 3: Add the Dependency
 
 ```bash
-sino add github:yourname/myutils@1.0.0
+mozhi add github:yourname/myutils@1.0.0
 ```
 
-This adds to `sino.toml`:
+This adds to `mozhi.toml`:
 
 ```toml
 [dependencies]
@@ -204,7 +204,7 @@ This adds to `sino.toml`:
 ### Step 4: Install
 
 ```bash
-sino install
+mozhi install
 ```
 
 Output:
@@ -212,14 +212,14 @@ Output:
 [info]  Installing 1 dependencies...
   → Resolving github:yourname/myutils (1.0.0)...
 [ok]    github:yourname/myutils -> v1.0.0
-[ok]    Installed 1 dependencies. Lock file: sino.lock
+[ok]    Installed 1 dependencies. Lock file: mozhi.lock
 ```
 
 ### Step 5: Use It
 
-Edit `src/main.si`:
+Edit `src/main.mz`:
 
-```sino
+```mozhi
 import myutils
 
 func main():
@@ -232,7 +232,7 @@ main()
 Run:
 
 ```bash
-sino run
+mozhi run
 ```
 
 ---
@@ -244,7 +244,7 @@ Mix C, C++, Assembly, and Rust in one library.
 ### Step 1: Initialize
 
 ```bash
-sino init --lib polyglot
+mozhi init --lib polyglot
 cd polyglot
 ```
 
@@ -294,7 +294,7 @@ pub extern "C" fn rs_factorial(n: u64) -> u64 {
 }
 ```
 
-### Step 6: Configure `sino.toml`
+### Step 6: Configure `mozhi.toml`
 
 ```toml
 name = "polyglot"
@@ -313,7 +313,7 @@ type = "static"
 ### Step 7: Build
 
 ```bash
-sino build
+mozhi build
 ```
 
 Output:
@@ -339,21 +339,21 @@ For development, link to a local library without publishing.
 
 ```bash
 mkdir myworkspace && cd myworkspace
-sino init --lib utils
-sino init --lib app
+mozhi init --lib utils
+mozhi init --lib app
 ```
 
 ### Step 2: Add Local Dependency
 
 ```bash
 cd app
-sino add local:../utils
-sino install
+mozhi add local:../utils
+mozhi install
 ```
 
 ### Step 3: Edit and Iterate
 
-Edit `../utils/src/utils.si` — changes are immediately visible to `app/` because `sino_modules/utils` is a symlink.
+Edit `../utils/src/utils.mz` — changes are immediately visible to `app/` because `mozhi_modules/utils` is a symlink.
 
 ---
 
@@ -361,9 +361,9 @@ Edit `../utils/src/utils.si` — changes are immediately visible to `app/` becau
 
 ### Step 1: Write Tests
 
-`tests/test_math.si`:
+`tests/test_math.mz`:
 
-```sino
+```mozhi
 # Unit tests for math library
 
 import math
@@ -389,7 +389,7 @@ end
 ### Step 2: Run
 
 ```bash
-sino test
+mozhi test
 ```
 
 ---
@@ -398,31 +398,31 @@ sino test
 
 ### Conditional Compilation
 
-Sino doesn't have built-in conditional compilation, but you can use environment variables or separate files:
+Mozhi doesn't have built-in conditional compilation, but you can use environment variables or separate files:
 
 ```
 src/
-├── math.si          # main module
-├── math_linux.si    # Linux-specific
-└── math_macos.si    # macOS-specific
+├── math.mz          # main module
+├── math_linux.mz    # Linux-specific
+└── math_macos.mz    # macOS-specific
 ```
 
-And in `math.si`:
+And in `math.mz`:
 
-```sino
+```mozhi
 # Re-export platform-specific code
-# (Future: sino will support conditional imports)
+# (Future: mozhi will support conditional imports)
 ```
 
 ### Module Organization
 
 ```
 src/
-├── mylib.si          # Main module (import mylib)
-├── vector.si         # Sub-module (import mylib.vector)
-├── matrix.si         # Sub-module (import mylib.matrix)
+├── mylib.mz          # Main module (import mylib)
+├── vector.mz         # Sub-module (import mylib.vector)
+├── matrix.mz         # Sub-module (import mylib.matrix)
 └── utils/
-    └── string.si     # Nested (import mylib.utils.string)
+    └── string.mz     # Nested (import mylib.utils.string)
 ```
 
 ### Versioning

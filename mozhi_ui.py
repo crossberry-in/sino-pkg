@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-sino_ui — Modern CLI UI/UX module for the Mozhi programming language.
+mozhi_ui — Modern CLI UI/UX module for the Mozhi programming language.
 
 Provides:
   - Terminal capability detection (TTY, NO_COLOR, FORCE_COLOR, --no-color)
@@ -14,16 +14,16 @@ Provides:
   - Tables
 
 Usage:
-    from sino_ui import UI
+    from mozhi_ui import UI
 
     ui = ui_or_no_color(args)
     ui.banner()
     ui.success("Build completed")
-    ui.error("SN1001", "Unknown variable", file="src/main.si", line=12, col=8,
+    ui.error("SN1001", "Unknown variable", file="src/main.mz", line=12, col=8,
              source_line='print(total)', col_span=5,
              message="Variable 'total' does not exist.",
              hint="Did you mean: totalPrice",
-             doc_url="https://crossberry-in.github.io/sino-lang-docs/errors/SN1001")
+             doc_url="https://crossberry-in.github.io/mozhi-doc/errors/SN1001")
 """
 
 import os
@@ -386,7 +386,7 @@ class UI:
 
     def _render_source_context(self, file, line, col, source, col_span, color):
         """Render the source file snippet with caret."""
-        # Header: ┌─ src/main.si:12:8
+        # Header: ┌─ src/main.mz:12:8
         h = self._box["h"]
         v = self._box["v"]
         tl = self._box["tl"]
@@ -455,7 +455,7 @@ class UI:
 
     def version(self, version: str, target: str = None):
         """Print version info."""
-        self.write(self.bold(f"sino-pkg {version}"))
+        self.write(self.bold(f"mozhi-pkg {version}"))
         self.write(self.dim("Mozhi Programming Language Toolchain"))
         if target:
             self.write(self.dim(f"Target: {target}"))
@@ -488,7 +488,7 @@ class UI:
         self.write()
 
     def fatal_compiler_error(self, code: str, message: str, version: str, target: str,
-                             report_url: str = "https://github.com/crossberry-in/sino-pkg/issues"):
+                             report_url: str = "https://github.com/crossberry-in/mozhi-pkg/issues"):
         """Render an internal compiler error."""
         self.write()
         self.write(self.c(self.bold(f"fatal[{code}]"), Colors.ERROR))

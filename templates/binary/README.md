@@ -1,3 +1,3 @@
-# Sino Binary Project Template
+# Mozhi Binary Project Template
 
-This template is used by `sino init --bin <name>` to scaffold a new application project.
+This template is used by `mozhi init --bin <name>` to scaffold a new application project.

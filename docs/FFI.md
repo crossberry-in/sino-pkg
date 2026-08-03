@@ -1,16 +1,16 @@
 # Foreign Function Interface (FFI)
 
-Sino libraries can call functions written in C, C++, Assembly, and Rust. This allows you to write performance-critical code in a systems language while keeping the high-level logic in Sino.
+Mozhi libraries can call functions written in C, C++, Assembly, and Rust. This allows you to write performance-critical code in a systems language while keeping the high-level logic in Mozhi.
 
 ---
 
 ## How It Works
 
 1. You write foreign functions in `native/*.c`, `native/*.cpp`, `native/*.S`, or `native/*.rs`
-2. You enable the corresponding flag in `[build]` in `sino.toml`
-3. `sino build` compiles the foreign code into object files
+2. You enable the corresponding flag in `[build]` in `mozhi.toml`
+3. `mozhi build` compiles the foreign code into object files
 4. Object files are linked into a static (`.a`) or shared (`.so`/`.dylib`/`.dll`) library
-5. The Sino interpreter calls these functions through the C ABI
+5. The Mozhi interpreter calls these functions through the C ABI
 
 ---
 
@@ -18,23 +18,23 @@ Sino libraries can call functions written in C, C++, Assembly, and Rust. This al
 
 ```
 mylib/
-├── sino.toml
+├── mozhi.toml
 ├── src/
-│   └── mylib.si          # Sino code (calls foreign functions)
+│   └── mylib.mz          # Mozhi code (calls foreign functions)
 ├── native/
 │   ├── mylib.c           # C implementation
 │   ├── mylib.cpp         # C++ implementation
 │   ├── simd.S            # Assembly implementation
 │   └── fastmath.rs       # Rust implementation
 └── include/
-    └── mylib.h           # C/C++ headers (also used by Sino FFI)
+    └── mylib.h           # C/C++ headers (also used by Mozhi FFI)
 ```
 
 ---
 
 ## C
 
-### `sino.toml`
+### `mozhi.toml`
 
 ```toml
 [build]
@@ -76,7 +76,7 @@ double c_sqrt(double x);
 
 ### Compilation
 
-`sino build` compiles `native/*.c` with:
+`mozhi build` compiles `native/*.c` with:
 
 ```bash
 cc -c -O2 -fPIC -Iinclude -Inative native/mylib.c -o build/mylib_c.o
@@ -86,7 +86,7 @@ cc -c -O2 -fPIC -Iinclude -Inative native/mylib.c -o build/mylib_c.o
 
 ## C++
 
-### `sino.toml`
+### `mozhi.toml`
 
 ```toml
 [build]
@@ -127,19 +127,19 @@ void cpp_sort_ints(int* arr, int n) {
 
 ### Compilation
 
-`sino build` compiles `native/*.cpp` with:
+`mozhi build` compiles `native/*.cpp` with:
 
 ```bash
 c++ -c -O2 -fPIC -Iinclude -Inative native/mylib.cpp -o build/mylib_cpp.o
 ```
 
-> **Important:** All functions callable from Sino must be wrapped in `extern "C" {}`. Otherwise, C++ name mangling will prevent the Sino FFI from finding them.
+> **Important:** All functions callable from Mozhi must be wrapped in `extern "C" {}`. Otherwise, C++ name mangling will prevent the Mozhi FFI from finding them.
 
 ---
 
 ## Assembly
 
-### `sino.toml`
+### `mozhi.toml`
 
 ```toml
 [build]
@@ -179,7 +179,7 @@ asm_square:
 
 ### Compilation
 
-`sino build` compiles `native/*.S` with:
+`mozhi build` compiles `native/*.S` with:
 
 ```bash
 cc -c native/simd.S -o build/simd_asm.o
@@ -191,7 +191,7 @@ cc -c native/simd.S -o build/simd_asm.o
 
 ## Rust
 
-### `sino.toml`
+### `mozhi.toml`
 
 ```toml
 [build]
@@ -237,7 +237,7 @@ pub extern "C" fn rs_sort(arr: *mut i32, len: usize) {
 
 ### Compilation
 
-`sino build` compiles `native/*.rs` with:
+`mozhi build` compiles `native/*.rs` with:
 
 ```bash
 rustc --crate-type staticlib -O native/mylib.rs -o build/mylib.a
@@ -245,7 +245,7 @@ rustc --crate-type staticlib -O native/mylib.rs -o build/mylib.a
 
 The resulting static library (`.a`) is then linked into the final output alongside the C/C++/ASM object files.
 
-> **Important:** All functions callable from Sino must be marked with `#[no_mangle]` and `extern "C"`. Otherwise, Rust will apply name mangling and the Sino FFI won't find them.
+> **Important:** All functions callable from Mozhi must be marked with `#[no_mangle]` and `extern "C"`. Otherwise, Rust will apply name mangling and the Mozhi FFI won't find them.
 
 ---
 
@@ -269,12 +269,12 @@ native/
 └── crypto.rs       # Rust crypto (memory-safe)
 ```
 
-`sino build` compiles all of them and links the results into a single library:
+`mozhi build` compiles all of them and links the results into a single library:
 
 ```
 dist/
 ├── libmylib.a      # contains: core_c.o, algorithms_cpp.o, simd_asm.o, crypto.a
-└── mylib.silib     # Sino source package
+└── mylib.silib     # Mozhi source package
 ```
 
 ---
@@ -284,7 +284,7 @@ dist/
 ### Static Library (`--static`)
 
 ```bash
-sino build --static
+mozhi build --static
 ```
 
 Output: `dist/lib<name>.a`
@@ -294,7 +294,7 @@ Contains all object files archived with `ar rcs`. Use this when you want to embe
 ### Shared Library (`--shared`)
 
 ```bash
-sino build --shared
+mozhi build --shared
 ```
 
 Output:
@@ -304,15 +304,15 @@ Output:
 
 Use this for runtime-loaded libraries (plugins, dynamic FFI).
 
-### Native Sino Library (`--native`)
+### Native Mozhi Library (`--native`)
 
 ```bash
-sino build --native
+mozhi build --native
 ```
 
 Output: `dist/<name>.silib`
 
-A ZIP archive containing the `.si` source files and `sino.toml`. No foreign code is compiled. Use this for pure-Sino libraries.
+A ZIP archive containing the `.mz` source files and `mozhi.toml`. No foreign code is compiled. Use this for pure-Mozhi libraries.
 
 ---
 
@@ -329,7 +329,7 @@ include/
 
 ## Compiler Detection
 
-sino-pkg auto-detects available compilers:
+mozhi-pkg auto-detects available compilers:
 
 | Language | Compilers tried (in order) |
 |----------|---------------------------|
@@ -343,7 +343,7 @@ sino-pkg auto-detects available compilers:
 Check detected compilers with:
 
 ```bash
-sino version
+mozhi version
 ```
 
 ---

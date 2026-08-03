@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 #
-# Sino Package Manager — Universal installer
+# Mozhi Package Manager — Universal installer
 #
 # Supported platforms: Linux, macOS, WSL, Termux, Windows (Git Bash/MSYS)
 #
 # Usage:
-#   curl -fsSL https://github.com/crossberry-in/sino-pkg/raw/main/install.sh | bash
+#   curl -fsSL https://github.com/crossberry-in/mozhi-pkg/raw/main/install.sh | bash
 #
 set -e
 
-REPO="crossberry-in/sino-pkg"
-BINARY_NAME="sino"
+REPO="crossberry-in/mozhi-pkg"
+BINARY_NAME="mozhi"
 
 # --- Helpers (all output to stderr) -------------------------------------
 
@@ -65,13 +65,13 @@ detect_os() {
     echo "$os"
 }
 
-# --- Download the sino script -------------------------------------------
+# --- Download the mozhi script -------------------------------------------
 
-download_sino() {
+download_mozhi() {
     local tmp_file="$1"
-    local url="https://raw.githubusercontent.com/${REPO}/main/sino"
+    local url="https://raw.githubusercontent.com/${REPO}/main/mozhi"
 
-    info "Downloading sino CLI..."
+    info "Downloading mozhi CLI..."
     if ! curl -fSL --progress-bar -o "$tmp_file" "$url"; then
         error "Download failed. URL: $url"
         exit 1
@@ -108,7 +108,7 @@ check_python() {
 
 # --- Install ------------------------------------------------------------
 
-install_sino() {
+install_mozhi() {
     local tmp_file="$1"
     local install_dir="$2"
     local final_path
@@ -116,21 +116,21 @@ install_sino() {
 
     final_path="$install_dir/$BINARY_NAME"
 
-    # --- Migration: if an old interpreter binary is installed as 'sino', rename it ---
-    local existing_sino
-    existing_sino="$(command -v sino 2>/dev/null || true)"
-    if [ -n "$existing_sino" ]; then
+    # --- Migration: if an old interpreter binary is installed as 'mozhi', rename it ---
+    local existing_mozhi
+    existing_mozhi="$(command -v mozhi 2>/dev/null || true)"
+    if [ -n "$existing_mozhi" ]; then
         # Check if it's a binary (not a Python script with #!)
         local first_bytes
-        first_bytes="$(head -c 2 "$existing_sino" 2>/dev/null || echo "")"
+        first_bytes="$(head -c 2 "$existing_mozhi" 2>/dev/null || echo "")"
         if [ "$first_bytes" != "#!" ]; then
             # It's a binary — likely the old interpreter. Rename it.
-            local interp_path="$install_dir/sino-interpreter"
-            info "Migrating existing 'sino' binary to 'sino-interpreter'..."
+            local interp_path="$install_dir/mozhi-interpreter"
+            info "Migrating existing 'mozhi' binary to 'mozhi-interpreter'..."
             if [ -w "$install_dir" ]; then
-                mv "$existing_sino" "$interp_path" 2>/dev/null || true
+                mv "$existing_mozhi" "$interp_path" 2>/dev/null || true
             else
-                sudo mv "$existing_sino" "$interp_path" 2>/dev/null || true
+                sudo mv "$existing_mozhi" "$interp_path" 2>/dev/null || true
             fi
             success "Migrated interpreter to: $interp_path"
         fi
@@ -157,43 +157,43 @@ install_sino() {
 # --- Verify -------------------------------------------------------------
 
 verify_installation() {
-    local sino_cmd
-    sino_cmd="$(command -v sino 2>/dev/null || true)"
+    local mozhi_cmd
+    mozhi_cmd="$(command -v mozhi 2>/dev/null || true)"
 
-    if [ -z "$sino_cmd" ]; then
-        warn "sino was installed but is not on your PATH."
+    if [ -z "$mozhi_cmd" ]; then
+        warn "mozhi was installed but is not on your PATH."
         warn "Open a new terminal, or run: source ~/.bashrc  (or ~/.zshrc)"
         return 0
     fi
 
     info "Verifying installation..."
-    if "$sino_cmd" version 2>/dev/null; then
-        success "sino-pkg dispatcher is installed and working!"
+    if "$mozhi_cmd" version 2>/dev/null; then
+        success "mozhi-pkg dispatcher is installed and working!"
     else
-        warn "sino was installed but 'sino version' failed."
-        warn "Try opening a new terminal, then run 'sino version'."
+        warn "mozhi was installed but 'mozhi version' failed."
+        warn "Try opening a new terminal, then run 'mozhi version'."
     fi
 
-    # Check if the Sino interpreter is also installed
+    # Check if the Mozhi interpreter is also installed
     local interp
-    interp="$(command -v sino-interpreter 2>/dev/null || true)"
+    interp="$(command -v mozhi-interpreter 2>/dev/null || true)"
     if [ -z "$interp" ]; then
         printf '\n' >&2
-        warn "The Sino interpreter ('sino-interpreter') was not found." >&2
-        info "Install it for 'sino file.si' and 'sino repl' to work:" >&2
-        info "  curl -fsSL https://github.com/crossberry-in/sino-lang-docs/raw/main/install.sh | bash" >&2
+        warn "The Mozhi interpreter ('mozhi-interpreter') was not found." >&2
+        info "Install it for 'mozhi file.mz' and 'mozhi repl' to work:" >&2
+        info "  curl -fsSL https://github.com/crossberry-in/mozhi-doc/raw/main/install.sh | bash" >&2
     fi
 
     printf '\n' >&2
     info "Quick start:" >&2
-    info "  sino init --lib mylib   # create a library" >&2
-    info "  sino init --bin myapp   # create an application" >&2
-    info "  sino build              # build the project" >&2
-    info "  sino test               # run tests" >&2
-    info "  sino my_script.si       # run a script (needs interpreter)" >&2
-    info "  sino                    # start REPL (needs interpreter)" >&2
+    info "  mozhi init --lib mylib   # create a library" >&2
+    info "  mozhi init --bin myapp   # create an application" >&2
+    info "  mozhi build              # build the project" >&2
+    info "  mozhi test               # run tests" >&2
+    info "  mozhi my_script.mz       # run a script (needs interpreter)" >&2
+    info "  mozhi                    # start REPL (needs interpreter)" >&2
     info "" >&2
-    info "Docs: https://github.com/crossberry-in/sino-pkg" >&2
+    info "Docs: https://github.com/crossberry-in/mozhi-pkg" >&2
 }
 
 # --- Main ---------------------------------------------------------------
@@ -201,7 +201,7 @@ verify_installation() {
 main() {
     printf '\n' >&2
     printf '  \033[1;36m===================================\033[0m\n' >&2
-    printf '  \033[1;36m   Sino Package Manager Installer\033[0m\n' >&2
+    printf '  \033[1;36m   Mozhi Package Manager Installer\033[0m\n' >&2
     printf '  \033[1;36m===================================\033[0m\n' >&2
     printf '\n' >&2
 
@@ -211,14 +211,14 @@ main() {
     os="$(detect_os)"
     install_dir="$(install_dir_for "$os")"
     tmp_dir="${TMPDIR:-/tmp}"
-    tmp_file="${tmp_dir}/sino-download-$$"
+    tmp_file="${tmp_dir}/mozhi-download-$$"
 
     info "Detected platform: $os"
     info "Install location:  $install_dir"
     printf '\n' >&2
 
-    download_sino "$tmp_file"
-    install_sino "$tmp_file" "$install_dir"
+    download_mozhi "$tmp_file"
+    install_mozhi "$tmp_file" "$install_dir"
 
     printf '\n' >&2
     verify_installation

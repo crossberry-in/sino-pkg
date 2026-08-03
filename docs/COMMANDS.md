@@ -1,17 +1,17 @@
 # Command Reference
 
-Complete reference for all `sino` commands.
+Complete reference for all `mozhi` commands.
 
 ---
 
-## `sino init`
+## `mozhi init`
 
-Initialize a new Sino project.
+Initialize a new Mozhi project.
 
 ### Usage
 
 ```
-sino init [--lib|--bin] [name]
+mozhi init [--lib|--bin] [name]
 ```
 
 ### Options
@@ -28,23 +28,23 @@ sino init [--lib|--bin] [name]
 
 ```bash
 # Create a library in a new directory
-sino init --lib mymath
+mozhi init --lib mymath
 
 # Create a binary using the current directory name
-sino init --bin
+mozhi init --bin
 
 # Create a library in the current directory
-cd mylib && sino init --lib
+cd mylib && mozhi init --lib
 ```
 
 ### Library Project Layout
 
 ```
 mylib/
-├── sino.toml
+├── mozhi.toml
 ├── src/
-│   ├── mylib.si
-│   └── vector.si
+│   ├── mylib.mz
+│   └── vector.mz
 ├── native/
 │   ├── mylib.c
 │   ├── mylib.cpp
@@ -52,9 +52,9 @@ mylib/
 ├── include/
 │   └── mylib.h
 ├── tests/
-│   └── test_lib.si
+│   └── test_lib.mz
 ├── examples/
-│   └── demo.si
+│   └── demo.mz
 ├── README.md
 └── LICENSE
 ```
@@ -63,22 +63,22 @@ mylib/
 
 ```
 myapp/
-├── sino.toml
+├── mozhi.toml
 ├── src/
-│   └── main.si
+│   └── main.mz
 └── README.md
 ```
 
 ---
 
-## `sino build`
+## `mozhi build`
 
-Build the project according to its `sino.toml`.
+Build the project according to its `mozhi.toml`.
 
 ### Usage
 
 ```
-sino build [--static|--shared|--native]
+mozhi build [--static|--shared|--native]
 ```
 
 ### Options
@@ -87,9 +87,9 @@ sino build [--static|--shared|--native]
 |--------|-------------|
 | `--static` | Build a static library (`lib<name>.a`) |
 | `--shared` | Build a shared library (`lib<name>.so`/`.dylib`/`.dll`) |
-| `--native` | Build a native Sino library (`<name>.silib`) |
+| `--native` | Build a native Mozhi library (`<name>.silib`) |
 
-If no option is given, uses the `[build.output] type` from `sino.toml`.
+If no option is given, uses the `[build.output] type` from `mozhi.toml`.
 
 ### Build Process
 
@@ -101,7 +101,7 @@ If no option is given, uses the `[build.output] type` from `sino.toml`.
 6. **Link** all object files into the output:
    - Static: `ar rcs lib<name>.a *.o`
    - Shared: `cc -shared -o lib<name>.so *.o`
-   - Native: `zip` of `.si` files + manifest
+   - Native: `zip` of `.mz` files + manifest
 7. For static/shared, also build a `.silib` package
 
 ### Output Location
@@ -114,52 +114,52 @@ dist/
 ├── libmylib.so        # shared library (Linux)
 ├── libmylib.dylib     # shared library (macOS)
 ├── mylib.dll          # shared library (Windows)
-└── mylib.silib        # native Sino library (zip)
+└── mylib.silib        # native Mozhi library (zip)
 ```
 
 ---
 
-## `sino install`
+## `mozhi install`
 
-Install all dependencies listed in `sino.toml`.
+Install all dependencies listed in `mozhi.toml`.
 
 ### Usage
 
 ```
-sino install
+mozhi install
 ```
 
 ### Process
 
-1. Read `[dependencies]` from `sino.toml`
+1. Read `[dependencies]` from `mozhi.toml`
 2. For each dependency:
    - Resolve the version (GitHub clone, local path, or registry)
-   - Cache the resolved package in `~/.sino/cache/`
-   - Create a symlink in `sino_modules/`
-3. Write the resolved versions to `sino.lock`
+   - Cache the resolved package in `~/.mozhi/cache/`
+   - Create a symlink in `mozhi_modules/`
+3. Write the resolved versions to `mozhi.lock`
 
 ### Example
 
 ```bash
-$ sino install
+$ mozhi install
 [info]  Installing 2 dependencies...
-  → Resolving github:crossberry-in/sino-math (^1.0.0)...
-[ok]    github:crossberry-in/sino-math -> v1.0.0
+  → Resolving github:crossberry-in/mozhi-math (^1.0.0)...
+[ok]    github:crossberry-in/mozhi-math -> v1.0.0
   → Resolving local:../mylib (*)...
 [ok]    local:../mylib -> v0.2.0
-[ok]    Installed 2 dependencies. Lock file: sino.lock
+[ok]    Installed 2 dependencies. Lock file: mozhi.lock
 ```
 
 ---
 
-## `sino add`
+## `mozhi add`
 
-Add a dependency to `sino.toml`.
+Add a dependency to `mozhi.toml`.
 
 ### Usage
 
 ```
-sino add <source> [version]
+mozhi add <source> [version]
 ```
 
 ### Sources
@@ -176,85 +176,85 @@ sino add <source> [version]
 
 ```bash
 # GitHub, latest version
-sino add github:crossberry-in/sino-math
+mozhi add github:crossberry-in/mozhi-math
 
 # GitHub, specific version
-sino add github:crossberry-in/sino-math 1.0.0
-sino add github:crossberry-in/sino-math ^1.0.0
+mozhi add github:crossberry-in/mozhi-math 1.0.0
+mozhi add github:crossberry-in/mozhi-math ^1.0.0
 
 # GitHub, pinned via @ syntax
-sino add github:crossberry-in/sino-math@1.2.0
+mozhi add github:crossberry-in/mozhi-math@1.2.0
 
 # Local path
-sino add local:../mylib
+mozhi add local:../mylib
 ```
 
 ---
 
-## `sino remove`
+## `mozhi remove`
 
-Remove a dependency from `sino.toml`.
+Remove a dependency from `mozhi.toml`.
 
 ### Usage
 
 ```
-sino remove <name>
+mozhi remove <name>
 ```
 
 ### Examples
 
 ```bash
-sino remove github:crossberry-in/sino-math
-sino remove local:../mylib
-sino remove serde
+mozhi remove github:crossberry-in/mozhi-math
+mozhi remove local:../mylib
+mozhi remove serde
 ```
 
 ---
 
-## `sino update`
+## `mozhi update`
 
 Update dependencies.
 
 ### Usage
 
 ```
-sino update [name...]
+mozhi update [name...]
 ```
 
 ### Examples
 
 ```bash
 # Update all dependencies
-sino update
+mozhi update
 
 # Update specific packages
-sino update github:crossberry-in/sino-math
+mozhi update github:crossberry-in/mozhi-math
 ```
 
 ---
 
-## `sino test`
+## `mozhi test`
 
 Run all test files in `tests/`.
 
 ### Usage
 
 ```
-sino test
+mozhi test
 ```
 
 ### Process
 
-1. Find all `*.si` files in `tests/`
-2. Run each with the `sino` interpreter
+1. Find all `*.mz` files in `tests/`
+2. Run each with the `mozhi` interpreter
 3. Report pass/fail count
 
 ### Example
 
 ```bash
-$ sino test
+$ mozhi test
 [info]  Running 2 test files...
-  → Running test_lib.si...
+  → Running test_lib.mz...
 PASS: test_add
 PASS: test_multiply
 All tests passed!
@@ -263,27 +263,27 @@ All tests passed!
 
 ---
 
-## `sino doc`
+## `mozhi doc`
 
 Generate documentation from source files.
 
 ### Usage
 
 ```
-sino doc
+mozhi doc
 ```
 
 ### Output
 
 - `docs/API.md` — API reference extracted from `public func` declarations
-- `.vscode/sino-lsp.json` — VS Code / LSP metadata for IDE integration
+- `.vscode/mozhi-lsp.json` — VS Code / LSP metadata for IDE integration
 
 ### Example
 
 ```markdown
 # mylib API
 
-## mylib.si
+## mylib.mz
 
 ### `add(a, b)`
 
@@ -298,14 +298,14 @@ Multiplies two numbers.
 
 ---
 
-## `sino publish`
+## `mozhi publish`
 
 Publish to the registry (currently a stub).
 
 ### Usage
 
 ```
-sino publish
+mozhi publish
 ```
 
 ### Current Behavior
@@ -313,85 +313,85 @@ sino publish
 Prints instructions for distributing via GitHub releases:
 
 ```
-[warn]  'sino publish' is not yet implemented for the public registry.
+[warn]  'mozhi publish' is not yet implemented for the public registry.
 [info]  To distribute mylib v1.0.0:
   1. Push to GitHub
   2. Tag a release: git tag v1.0.0
-  3. Others can install with: sino add github:you/mylib
+  3. Others can install with: mozhi add github:you/mylib
 ```
 
 ---
 
-## `sino clean`
+## `mozhi clean`
 
 Remove all build artifacts.
 
 ### Usage
 
 ```
-sino clean
+mozhi clean
 ```
 
 Removes:
 - `build/` directory
 - `dist/` directory
-- `sino_modules/` directory
-- `sino.lock` file
+- `mozhi_modules/` directory
+- `mozhi.lock` file
 
 ---
 
-## `sino run`
+## `mozhi run`
 
-Run the project's main script (`src/main.si`).
+Run the project's main script (`src/main.mz`).
 
 ### Usage
 
 ```
-sino run [args...]
+mozhi run [args...]
 ```
 
 ### Example
 
 ```bash
-$ sino run
+$ mozhi run
 Hello from myapp!
 Sum:  30
 ```
 
 ---
 
-## `sino version`
+## `mozhi version`
 
 Show version and detected compilers.
 
 ### Usage
 
 ```
-sino version
-sino --version
-sino -v
+mozhi version
+mozhi --version
+mozhi -v
 ```
 
 ### Example
 
 ```
-sino-pkg 1.0.0
-Sino Package Manager
+mozhi-pkg 1.0.0
+Mozhi Package Manager
 Compilers: c=cc, cpp=c++, asm=cc, ar=ar, git=git
 Platform:  linux/x86_64
 ```
 
 ---
 
-## `sino help`
+## `mozhi help`
 
 Show help.
 
 ### Usage
 
 ```
-sino help
-sino --help
-sino -h
-sino
+mozhi help
+mozhi --help
+mozhi -h
+mozhi
 ```

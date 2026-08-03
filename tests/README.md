@@ -1,4 +1,4 @@
-# Self-tests for sino-pkg
+# Self-tests for mozhi-pkg
 #
-# These tests verify that the sino CLI works correctly.
+# These tests verify that the mozhi CLI works correctly.
 # Run with: python3 tests/test_cli.py

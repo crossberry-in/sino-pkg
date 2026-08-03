@@ -3,15 +3,15 @@
 Mozhi Programming Language Toolchain (mozhi-pkg) v1.1.0
 
 A modern, beautiful, fast, and consistent command-line interface for the
-Sino programming language. Provides a polished developer experience
+Mozhi programming language. Provides a polished developer experience
 comparable to Rust Cargo, Clang, and Go tooling.
 
 Usage:
-    sino <command> [options] [args]
+    mozhi <command> [options] [args]
 
 Commands:
     new        Create a new binary project
-    init       Initialize a new Sino project (--lib or --bin)
+    init       Initialize a new Mozhi project (--lib or --bin)
     build      Build the project (static/shared/native output)
     run        Build and run the project
     repl       Start the interactive Mozhi REPL
@@ -30,18 +30,18 @@ Commands:
     publish    Publish to registry (stub)
     login      Log in to the registry
     logout     Log out of the registry
-    doctor     Check the Sino environment
+    doctor     Check the Mozhi environment
     version    Show version
     help       Show help
 
 Examples:
-    sino new myapp
-    sino init --lib math
-    sino build --shared
-    sino run
-    sino test
-    sino doc
-    sino doctor
+    mozhi new myapp
+    mozhi init --lib math
+    mozhi build --shared
+    mozhi run
+    mozhi test
+    mozhi doc
+    mozhi doctor
 """
 
 import sys
@@ -59,28 +59,28 @@ import urllib.error
 from pathlib import Path
 from datetime import datetime
 
-# Import the sino_ui module — look in same directory, then ~/.sino/bin/
+# Import the mozhi_ui module — look in same directory, then ~/.mozhi/bin/
 _ui_search_paths = [
     Path(__file__).parent.resolve(),                       # same dir as this script
-    Path.home() / ".sino" / "bin",                          # user's sino bin dir
-    Path("/usr/local/lib/sino"),                            # system lib dir
-    Path("/usr/local/share/sino"),                          # system share dir
+    Path.home() / ".mozhi" / "bin",                          # user's mozhi bin dir
+    Path("/usr/local/lib/mozhi"),                            # system lib dir
+    Path("/usr/local/share/mozhi"),                          # system share dir
 ]
 
-def _find_sino_ui():
-    """Find sino_ui.py in known locations. Returns the dir containing it, or None."""
+def _find_mozhi_ui():
+    """Find mozhi_ui.py in known locations. Returns the dir containing it, or None."""
     for p in _ui_search_paths:
-        if (p / "sino_ui.py").exists():
+        if (p / "mozhi_ui.py").exists():
             return p
     return None
 
-_ui_dir = _find_sino_ui()
+_ui_dir = _find_mozhi_ui()
 
 if _ui_dir is None:
-    # Auto-download sino_ui.py to ~/.sino/bin/
+    # Auto-download mozhi_ui.py to ~/.mozhi/bin/
     import urllib.request
-    _ui_url = "https://github.com/crossberry-in/mozhi-pkg/raw/main/sino_ui.py"
-    _target = Path.home() / ".sino" / "bin" / "sino_ui.py"
+    _ui_url = "https://github.com/crossberry-in/mozhi-pkg/raw/main/mozhi_ui.py"
+    _target = Path.home() / ".mozhi" / "bin" / "mozhi_ui.py"
     _target.parent.mkdir(parents=True, exist_ok=True)
     try:
         urllib.request.urlretrieve(_ui_url, _target)
@@ -89,20 +89,20 @@ if _ui_dir is None:
         # Last resort: print a helpful error and exit
         import sys as _sys
         _sys.stderr.write(
-            "Error: sino_ui.py module not found.\n\n"
-            "This usually means the sino dispatcher was installed without its\n"
+            "Error: mozhi_ui.py module not found.\n\n"
+            "This usually means the mozhi dispatcher was installed without its\n"
             "companion UI module. To fix:\n\n"
             "  Option 1: Re-install mozhi-pkg (installs both files together):\n"
             "    curl -fsSL https://github.com/crossberry-in/mozhi-pkg/raw/main/install.sh | bash\n\n"
-            "  Option 2: Download sino_ui.py manually:\n"
-            "    sudo curl -fsSL -o /usr/local/lib/sino/sino_ui.py \\\n"
-            "      https://github.com/crossberry-in/mozhi-pkg/raw/main/sino_ui.py\n"
-            "    sudo mkdir -p /usr/local/lib/sino\n\n"
+            "  Option 2: Download mozhi_ui.py manually:\n"
+            "    sudo curl -fsSL -o /usr/local/lib/mozhi/mozhi_ui.py \\\n"
+            "      https://github.com/crossberry-in/mozhi-pkg/raw/main/mozhi_ui.py\n"
+            "    sudo mkdir -p /usr/local/lib/mozhi\n\n"
         )
         _sys.exit(1)
 
 sys.path.insert(0, str(_ui_dir))
-from sino_ui import UI, create_ui, ui_from_args
+from mozhi_ui import UI, create_ui, ui_from_args
 
 VERSION = "2.0.0"
 
@@ -110,7 +110,7 @@ VERSION = "2.0.0"
 # Configuration
 # ============================================================================
 
-MOZHI_HOME = Path.home() / ".sino"
+MOZHI_HOME = Path.home() / ".mozhi"
 CACHE_DIR = MOZHI_HOME / "cache"
 REGISTRY_DIR = MOZHI_HOME / "registry"
 GLOBAL_LIB_DIR = MOZHI_HOME / "libs"
@@ -142,7 +142,7 @@ STATIC_LIB_PREFIX = "lib"
 NATIVE_LIB_EXT = ".mzl"
 
 # ============================================================================
-# UI / Logging — uses sino_ui module for consistent, polished output
+# UI / Logging — uses mozhi_ui module for consistent, polished output
 # ============================================================================
 
 # Global UI instance — created in main() based on --no-color / --force-color args
@@ -366,7 +366,7 @@ class Manifest:
     def load(cls, path):
         p = Path(path)
         if not p.exists():
-            die(f"No {MANIFEST_FILE} found in current directory. Run 'sino init' first.")
+            die(f"No {MANIFEST_FILE} found in current directory. Run 'mozhi init' first.")
         text = p.read_text()
         return cls(parse_toml(text))
 
@@ -481,7 +481,7 @@ def resolve_registry_dependency(name, version_req):
     reg_path = REGISTRY_DIR / name
     if not reg_path.exists():
         die(f"Dependency '{name}' not found in registry. "
-            f"Use 'sino add github:owner/{name}' or 'sino add local:path/{name}'.")
+            f"Use 'mozhi add github:owner/{name}' or 'mozhi add local:path/{name}'.")
     versions = []
     for d in reg_path.iterdir():
         if d.is_dir():
@@ -587,7 +587,7 @@ def create_shared_library(objs, output, compilers, extra_libs=None):
         die(f"Link failed: {result.stderr}")
 
 def create_native_library(si_files, manifest, output):
-    """Create a native Sino library (.mzl) — a zip archive of .si files + manifest."""
+    """Create a native Mozhi library (.mzl) — a zip archive of .mz files + manifest."""
     step(f"PACK {output.name}")
     with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as zf:
         for si in si_files:
@@ -618,7 +618,7 @@ def build_project(manifest, output_type=None):
     include_dirs = [include_dir] if include_dir.exists() else []
     include_dirs.append(native_dir)
 
-    si_files = list(src_dir.glob("*.si")) if src_dir.exists() else []
+    si_files = list(src_dir.glob("*.mz")) if src_dir.exists() else []
 
     obj_files = []
 
@@ -686,7 +686,7 @@ def build_project(manifest, output_type=None):
 # ============================================================================
 
 def cmd_init(args):
-    """Initialize a new Sino project."""
+    """Initialize a new Mozhi project."""
     project_type = "lib"
     name = None
     i = 0
@@ -705,7 +705,7 @@ def cmd_init(args):
     if not name:
         name = Path.cwd().name
         if name in ("src", "build", "dist", ""):
-            die("Please provide a project name: sino init --lib mylib")
+            die("Please provide a project name: mozhi init --lib mylib")
         info(f"Using current directory name: {name}")
 
     project_dir = Path(name) if name != Path.cwd().name else Path(".")
@@ -720,8 +720,8 @@ def cmd_init(args):
     ok(f"Initialized {'library' if project_type == 'lib' else 'binary'} project: {name}")
     info("Next steps:")
     info(f"  cd {name}")
-    info("  sino build")
-    info("  sino test")
+    info("  mozhi build")
+    info("  mozhi test")
 
 def _init_library(project_dir, name):
     """Create a library project from template."""
@@ -734,7 +734,7 @@ def _init_library(project_dir, name):
     for d in [src_dir, native_dir, include_dir, tests_dir, examples_dir]:
         d.mkdir(parents=True, exist_ok=True)
 
-    (src_dir / f"{name}.si").write_text(f'''# {name} library
+    (src_dir / f"{name}.mz").write_text(f'''# {name} library
 
 public func add(a, b):
     return a + b
@@ -745,7 +745,7 @@ public func multiply(a, b):
 end
 ''')
 
-    (src_dir / "vector.si").write_text('''# Vector operations (sub-module)
+    (src_dir / "vector.mz").write_text('''# Vector operations (sub-module)
 
 public func dot(v1, v2):
     var sum = 0
@@ -822,7 +822,7 @@ long asm_square(long n);
 #endif /* {name.upper()}_H */
 ''')
 
-    (tests_dir / "test_lib.si").write_text(f'''# Tests for {name} library
+    (tests_dir / "test_lib.mz").write_text(f'''# Tests for {name} library
 
 import {name}
 
@@ -855,7 +855,7 @@ else:
 end
 ''')
 
-    (examples_dir / "demo.si").write_text(f'''# Demo of {name} library
+    (examples_dir / "demo.mz").write_text(f'''# Demo of {name} library
 
 import {name}
 
@@ -887,18 +887,18 @@ echo "multiply(3, 4) = ", multiply(3, 4)
 ## Build
 
 ```bash
-sino build
+mozhi build
 ```
 
 ## Test
 
 ```bash
-sino test
+mozhi test
 ```
 
 ## Use
 
-```sino
+```mozhi
 import {name}
 
 echo add(5, 10)
@@ -916,7 +916,7 @@ def _init_binary(project_dir, name):
     src_dir = project_dir / "src"
     src_dir.mkdir(parents=True, exist_ok=True)
 
-    (src_dir / "main.si").write_text(f'''# {name} — main entry point
+    (src_dir / "main.mz").write_text(f'''# {name} — main entry point
 
 func main():
     echo "Hello from {name}!"
@@ -952,9 +952,9 @@ main()
 ## Run
 
 ```bash
-sino run
+mozhi run
 # or
-sino src/main.si
+mozhi src/main.mz
 ```
 
 ## License
@@ -1052,11 +1052,11 @@ def cmd_install(args):
 def cmd_add(args):
     """Add a dependency."""
     if not args:
-        die("Usage: sino add <source> [version]\n"
-            "  sino add github:owner/repo\n"
-            "  sino add github:owner/repo@1.2.0\n"
-            "  sino add local:../mylib\n"
-            "  sino add mylib 1.0.0")
+        die("Usage: mozhi add <source> [version]\n"
+            "  mozhi add github:owner/repo\n"
+            "  mozhi add github:owner/repo@1.2.0\n"
+            "  mozhi add local:../mylib\n"
+            "  mozhi add mylib 1.0.0")
 
     source = args[0]
     version = args[1] if len(args) > 1 else "*"
@@ -1079,12 +1079,12 @@ def cmd_add(args):
 
     manifest.save(MANIFEST_FILE)
     ok(f"Added dependency: {source} ({version})")
-    info("Run 'sino install' to install it.")
+    info("Run 'mozhi install' to install it.")
 
 def cmd_remove(args):
     """Remove a dependency."""
     if not args:
-        die("Usage: sino remove <name>")
+        die("Usage: mozhi remove <name>")
 
     name = args[0]
     manifest = Manifest.load(MANIFEST_FILE)
@@ -1127,21 +1127,21 @@ def cmd_test(args):
         info("No tests directory found.")
         return
 
-    sino_bin = find_mozhi_interpreter()
-    if not sino_bin:
-        die("Sino interpreter not found. Install it from "
+    mozhi_bin = find_mozhi_interpreter()
+    if not mozhi_bin:
+        die("Mozhi interpreter not found. Install it from "
             "https://github.com/crossberry-in/mozhi-doc/releases "
             "or set $MOZHI_INTERPRETER.")
-    test_files = list(tests_dir.glob("*.si"))
+    test_files = list(tests_dir.glob("*.mz"))
     if not test_files:
-        info("No test files (*.si) found in tests/")
+        info("No test files (*.mz) found in tests/")
         return
 
     ui.write(ui.bold(f"Running {len(test_files)} test files..."))
     failures = 0
     for tf in test_files:
         ui.info(f"Running {tf.name}...")
-        result = subprocess.run([sino_bin, str(tf)], capture_output=True, text=True)
+        result = subprocess.run([mozhi_bin, str(tf)], capture_output=True, text=True)
         if result.stdout:
             print(result.stdout, end="")
         if result.returncode != 0:
@@ -1167,7 +1167,7 @@ def cmd_doc(args):
     doc_dir.mkdir(exist_ok=True)
 
     docs = []
-    for si in src_dir.glob("*.si"):
+    for si in src_dir.glob("*.mz"):
         info(f"Documenting {si.name}...")
         funcs = extract_functions(si)
         docs.append({"file": si.name, "functions": funcs})
@@ -1195,13 +1195,13 @@ def cmd_doc(args):
     lsp_meta = {
         "name": manifest.name,
         "version": manifest.version,
-        "files": [str(p) for p in src_dir.glob("*.si")],
+        "files": [str(p) for p in src_dir.glob("*.mz")],
     }
-    (vscode_dir / "sino-lsp.json").write_text(json.dumps(lsp_meta, indent=2))
-    ok(f"VS Code/LSP metadata: {vscode_dir / 'sino-lsp.json'}")
+    (vscode_dir / "mozhi-lsp.json").write_text(json.dumps(lsp_meta, indent=2))
+    ok(f"VS Code/LSP metadata: {vscode_dir / 'mozhi-lsp.json'}")
 
 def extract_functions(si_file):
-    """Extract public function definitions from a .si file."""
+    """Extract public function definitions from a .mz file."""
     funcs = []
     lines = si_file.read_text().splitlines()
     i = 0
@@ -1244,7 +1244,7 @@ def cmd_publish(args):
     ui.info("To distribute via GitHub:")
     ui.info(f"  1. Push to GitHub")
     ui.info(f"  2. Tag a release: git tag v{manifest.version}")
-    ui.info(f"  3. Others install with: sino add github:you/{manifest.name}")
+    ui.info(f"  3. Others install with: mozhi add github:you/{manifest.name}")
 
 def cmd_clean(args):
     """Remove build artifacts."""
@@ -1259,11 +1259,11 @@ def cmd_clean(args):
     ui.success("Cleaned build artifacts.", "\n".join(f"  removed: {r}" for r in removed))
 
 def find_mozhi_interpreter():
-    """Find the Sino interpreter binary, excluding this script itself.
+    """Find the Mozhi interpreter binary, excluding this script itself.
 
     Order of lookup:
       1. $MOZHI_INTERPRETER env var
-      2. ~/.sino/bin/mozhi-interpreter (or mozhi-interpreter.exe on Windows)
+      2. ~/.mozhi/bin/mozhi-interpreter (or mozhi-interpreter.exe on Windows)
       3. 'mozhi-interpreter' on PATH
       4. 'mozhi' on PATH, but only if it's NOT the mozhi-pkg Python script
       5. None
@@ -1276,7 +1276,7 @@ def find_mozhi_interpreter():
     if env_path and Path(env_path).exists():
         return env_path
 
-    # 2. ~/.sino/bin/mozhi-interpreter
+    # 2. ~/.mozhi/bin/mozhi-interpreter
     interp = MOZHI_HOME / "bin" / f"mozhi-interpreter{exe_suffix}"
     if interp.exists():
         return str(interp)
@@ -1286,7 +1286,7 @@ def find_mozhi_interpreter():
     if interp:
         return interp
 
-    # 4. sino on PATH, but skip if it's our own script
+    # 4. mozhi on PATH, but skip if it's our own script
     self_path = str(Path(__file__).resolve())
     path = shutil.which("mozhi")
     if path:
@@ -1306,12 +1306,12 @@ def find_mozhi_interpreter():
 
 def cmd_run(args):
     """Build (if needed) and run the project's main script."""
-    main_file = Path("src/main.si")
+    main_file = Path("src/main.mz")
     if not main_file.exists():
-        die("No src/main.si found. Use 'sino init --bin' first.")
+        die("No src/main.mz found. Use 'mozhi init --bin' first.")
     interp = find_mozhi_interpreter()
     if not interp:
-        die("Sino interpreter not found. Install it from "
+        die("Mozhi interpreter not found. Install it from "
             "https://github.com/crossberry-in/mozhi-doc/releases "
             "or set $MOZHI_INTERPRETER to its path.")
     ui.info(f"Running {main_file}...")
@@ -1338,13 +1338,13 @@ def cmd_help(args):
     ui.banner(title="Mozhi Compiler", subtitle=f"Version {VERSION}",
               tagline="Fast • Safe • Modern")
     ui.write(ui.bold("Usage:"))
-    ui.write(f"  sino {ui.dim('<command> [options] [args]')}")
+    ui.write(f"  mozhi {ui.dim('<command> [options] [args]')}")
     ui.write()
     ui.write(ui.bold("Commands:"))
 
     commands = [
         ("new", "Create a new binary project"),
-        ("init", "Initialize a new Sino project (--lib or --bin)"),
+        ("init", "Initialize a new Mozhi project (--lib or --bin)"),
         ("build", "Build the project (--static/--shared/--native)"),
         ("run", "Build and run the project"),
         ("repl", "Start the interactive Mozhi REPL"),
@@ -1363,7 +1363,7 @@ def cmd_help(args):
         ("publish", "Publish to registry"),
         ("login", "Log in to the registry"),
         ("logout", "Log out of the registry"),
-        ("doctor", "Check the Sino environment"),
+        ("doctor", "Check the Mozhi environment"),
         ("version", "Show version"),
         ("help", "Show this help"),
     ]
@@ -1371,11 +1371,11 @@ def cmd_help(args):
         ui.write(f"  {cmd_name.ljust(10)} {ui.dim(desc)}")
     ui.write()
     ui.write(ui.bold("Examples:"))
-    ui.write(f"  sino new myapp")
-    ui.write(f"  sino init --lib math")
-    ui.write(f"  sino build --shared")
-    ui.write(f"  sino test")
-    ui.write(f"  sino doctor")
+    ui.write(f"  mozhi new myapp")
+    ui.write(f"  mozhi init --lib math")
+    ui.write(f"  mozhi build --shared")
+    ui.write(f"  mozhi test")
+    ui.write(f"  mozhi doctor")
     ui.write()
     ui.write(ui.dim("Options:"))
     ui.write(f"  --no-color     Disable colored output")
@@ -1396,10 +1396,10 @@ def cmd_repl(args):
     ui.repl_banner(VERSION)
     interp = find_mozhi_interpreter()
     if not interp:
-        die("Sino interpreter not found. Install it from "
+        die("Mozhi interpreter not found. Install it from "
             "https://github.com/crossberry-in/mozhi-doc/releases "
             "or set $MOZHI_INTERPRETER.")
-    # The Sino interpreter has its own REPL when run with no args
+    # The Mozhi interpreter has its own REPL when run with no args
     os.execvp(interp, [interp])
 
 def cmd_bench(args):
@@ -1423,13 +1423,13 @@ def cmd_bench(args):
     ui.success("Benchmarks finished.")
 
 def cmd_fmt(args):
-    """Format Sino source files."""
+    """Format Mozhi source files."""
     ui.info("Formatting...")
     src_dir = Path("src")
     if not src_dir.exists():
         die("No src/ directory found.")
     formatted = 0
-    for si in src_dir.glob("*.si"):
+    for si in src_dir.glob("*.mz"):
         # Simple formatting: normalize indentation to 4 spaces, strip trailing whitespace
         text = si.read_text()
         lines = text.splitlines()
@@ -1450,14 +1450,14 @@ def cmd_fmt(args):
     ui.success(f"Formatted {formatted} file{'s' if formatted != 1 else ''}.", "Done.")
 
 def cmd_lint(args):
-    """Lint Sino source files."""
+    """Lint Mozhi source files."""
     ui.info("Linting...")
     src_dir = Path("src")
     if not src_dir.exists():
         die("No src/ directory found.")
     errors = 0
     warnings_count = 0
-    for si in src_dir.glob("*.si"):
+    for si in src_dir.glob("*.mz"):
         # Simple linter: check for unused vars, missing end, etc.
         text = si.read_text()
         lines = text.splitlines()
@@ -1491,7 +1491,7 @@ def cmd_lint(args):
 def cmd_search(args):
     """Search for packages."""
     if not args:
-        die("Usage: sino search <query>")
+        die("Usage: mozhi search <query>")
     query = args[0]
     ui.info(f"Searching for '{query}'...")
     ui.write()
@@ -1508,12 +1508,12 @@ def cmd_search(args):
         for p in results:
             ui.write(f"  {p}")
     ui.write()
-    ui.info("Use 'sino add <name>' to add a package.")
+    ui.info("Use 'mozhi add <name>' to add a package.")
 
 def cmd_uninstall(args):
     """Uninstall a package."""
     if not args:
-        die("Usage: sino uninstall <name>")
+        die("Usage: mozhi uninstall <name>")
     name = args[0]
     manifest = Manifest.load(MANIFEST_FILE)
     if name in manifest.dependencies:
@@ -1534,7 +1534,7 @@ def cmd_uninstall(args):
 
 def cmd_login(args):
     """Log in to the registry."""
-    ui.info("Logging in to the Sino registry...")
+    ui.info("Logging in to the Mozhi registry...")
     ui.write()
     username = input("Username: ").strip()
     if not username:
@@ -1564,7 +1564,7 @@ def cmd_logout(args):
         ui.info("Not logged in.")
 
 def cmd_doctor(args):
-    """Check the Sino environment."""
+    """Check the Mozhi environment."""
     ui.banner(title="Mozhi Environment Check", subtitle=f"v{VERSION}",
               tagline="Diagnosing your setup...")
     ui.write()
@@ -1572,11 +1572,11 @@ def cmd_doctor(args):
     checks = []
 
     # Compiler
-    sino_bin = find_mozhi_interpreter()
-    if sino_bin:
-        checks.append(("Compiler", "OK", f"found at {sino_bin}"))
+    mozhi_bin = find_mozhi_interpreter()
+    if mozhi_bin:
+        checks.append(("Compiler", "OK", f"found at {mozhi_bin}"))
     else:
-        checks.append(("Compiler", "FAIL", "sino interpreter not found — install from mozhi-doc releases"))
+        checks.append(("Compiler", "FAIL", "mozhi interpreter not found — install from mozhi-doc releases"))
 
     # Package manager
     checks.append(("Package Manager", "OK", f"mozhi-pkg v{VERSION}"))
@@ -1653,16 +1653,16 @@ COMMANDS = {
 }
 
 def main():
-    """Unified Sino command dispatcher.
+    """Unified Mozhi command dispatcher.
 
     Routing rules (Go-style unified CLI):
-      - `sino` (no args)                     → start REPL (via interpreter)
-      - `sino file.si`                       → run file (via interpreter)
-      - `sino -` or `sino --`                → interpreter (stdin mode)
-      - `sino -v / --version / -V`           → mozhi-pkg version
-      - `sino -h / --help`                   → mozhi-pkg help
-      - `sino <subcommand> [args]`           → mozhi-pkg subcommand
-      - `sino <unknown-word>`                → try as filename via interpreter
+      - `mozhi` (no args)                     → start REPL (via interpreter)
+      - `mozhi file.mz`                       → run file (via interpreter)
+      - `mozhi -` or `mozhi --`                → interpreter (stdin mode)
+      - `mozhi -v / --version / -V`           → mozhi-pkg version
+      - `mozhi -h / --help`                   → mozhi-pkg help
+      - `mozhi <subcommand> [args]`           → mozhi-pkg subcommand
+      - `mozhi <unknown-word>`                → try as filename via interpreter
                                                  (preserves backwards compat)
     """
     global ui
@@ -1685,12 +1685,12 @@ def main():
         cmd_help([])
         return
 
-    # If the first arg is a .si file, run it via the interpreter
-    if cmd.endswith(".si"):
+    # If the first arg is a .mz file, run it via the interpreter
+    if cmd.endswith(".mz"):
         ui = create_ui()
         interp = find_mozhi_interpreter()
         if not interp:
-            die("Sino interpreter not found. Install it from "
+            die("Mozhi interpreter not found. Install it from "
                 "https://github.com/crossberry-in/mozhi-doc/releases "
                 "or set $MOZHI_INTERPRETER.")
         os.execvp(interp, [interp, cmd] + args)
@@ -1704,7 +1704,7 @@ def main():
         return
 
     # Otherwise, treat the first arg as a filename and pass to the interpreter.
-    # This preserves backwards compatibility: `sino myscript` still works
+    # This preserves backwards compatibility: `mozhi myscript` still works
     # if `myscript` is a file (the interpreter will error if it's not).
     ui = create_ui()
     interp = find_mozhi_interpreter()
@@ -1713,7 +1713,7 @@ def main():
     else:
         ui.fail(f"Unknown command or file: {cmd}")
         ui.write()
-        ui.info("Run 'sino help' for usage.")
+        ui.info("Run 'mozhi help' for usage.")
         sys.exit(1)
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 # Build artifacts
 build/
 dist/
-sino_modules/
+mozhi_modules/
 
 # Python
 __pycache__/
@@ -21,5 +21,5 @@ __pycache__/
 Thumbs.db
 
 # Lock file (commit this for reproducible builds, but allow ignoring)
-# sino.lock
-tests/_sino_import.py
+# mozhi.lock
+tests/_mozhi_import.py

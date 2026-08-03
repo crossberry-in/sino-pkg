@@ -1,12 +1,12 @@
-# Sino Package Manager (sino-pkg)
+# Mozhi Package Manager (mozhi-pkg)
 
 <div align="center">
 
-**A production-ready package manager for the Sino programming language.**
+**A production-ready package manager for the Mozhi programming language.**
 
 Build, dependency, and release tooling comparable to Cargo, Go Modules, or Swift Package Manager — with full C/C++/Assembly/Rust FFI support.
 
-[![Version: v1.0.0](https://img.shields.io/badge/Version-v1.0.0-green.svg)](https://github.com/crossberry-in/sino-pkg/releases)
+[![Version: v1.0.0](https://img.shields.io/badge/Version-v1.0.0-green.svg)](https://github.com/crossberry-in/mozhi-pkg/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform: Cross-platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows%20%7C%20Termux-blue.svg)](#platform-support)
 
@@ -16,19 +16,19 @@ Build, dependency, and release tooling comparable to Cargo, Go Modules, or Swift
 
 ## Overview
 
-**sino-pkg** is the official package manager for the [Sino programming language](https://github.com/crossberry-in/sino-lang-docs). It provides:
+**mozhi-pkg** is the official package manager for the [Mozhi programming language](https://github.com/crossberry-in/mozhi-doc). It provides:
 
-- **Native Sino libraries** (`.silib` packages)
+- **Native Mozhi libraries** (`.silib` packages)
 - **Foreign Function Interface** to C, C++, Assembly, and Rust
 - **Static libraries** (`lib<name>.a`)
 - **Shared libraries** (`lib<name>.so` / `lib<name>.dylib` / `<name>.dll`)
-- **GitHub-hosted dependencies** (`sino add github:owner/repo`)
-- **Local path dependencies** (`sino add local:../mylib`)
+- **GitHub-hosted dependencies** (`mozhi add github:owner/repo`)
+- **Local path dependencies** (`mozhi add local:../mylib`)
 - **Semantic versioning** with `^`, `~`, `>=`, `<`, `*` operators
-- **Lock files** (`sino.lock`) for reproducible builds
-- **Offline cache** (`~/.sino/cache/`)
-- **Test runner** (`sino test`)
-- **Documentation generator** (`sino doc`)
+- **Lock files** (`mozhi.lock`) for reproducible builds
+- **Offline cache** (`~/.mozhi/cache/`)
+- **Test runner** (`mozhi test`)
+- **Documentation generator** (`mozhi doc`)
 - **VS Code / LSP metadata generation**
 
 ---
@@ -40,46 +40,46 @@ Build, dependency, and release tooling comparable to Cargo, Go Modules, or Swift
 **Linux / macOS / WSL / Termux:**
 
 ```bash
-curl -fsSL https://github.com/crossberry-in/sino-pkg/raw/main/install.sh | bash
+curl -fsSL https://github.com/crossberry-in/mozhi-pkg/raw/main/install.sh | bash
 ```
 
 **Windows (PowerShell):**
 
 ```powershell
-irm https://github.com/crossberry-in/sino-pkg/raw/main/install.ps1 | iex
+irm https://github.com/crossberry-in/mozhi-pkg/raw/main/install.ps1 | iex
 ```
 
 ### Create a Library
 
 ```bash
-sino init --lib mymath
+mozhi init --lib mymath
 cd mymath
-sino build          # builds libmymath.a + mymath.silib
-sino test           # runs tests in tests/
-sino doc            # generates docs/API.md
+mozhi build          # builds libmymath.a + mymath.silib
+mozhi test           # runs tests in tests/
+mozhi doc            # generates docs/API.md
 ```
 
 ### Create a Binary
 
 ```bash
-sino init --bin myapp
+mozhi init --bin myapp
 cd myapp
-sino run            # runs src/main.si
+mozhi run            # runs src/main.mz
 ```
 
 ### Add Dependencies
 
 ```bash
 # From GitHub (clones, caches, resolves version)
-sino add github:crossberry-in/sino-math@1.0.0
-sino install
+mozhi add github:crossberry-in/mozhi-math@1.0.0
+mozhi install
 
 # From local path
-sino add local:../mylib
-sino install
+mozhi add local:../mylib
+mozhi install
 
 # Remove
-sino remove github:crossberry-in/sino-math
+mozhi remove github:crossberry-in/mozhi-math
 ```
 
 ---
@@ -88,20 +88,20 @@ sino remove github:crossberry-in/sino-math
 
 | Command | Description |
 |---------|-------------|
-| `sino init --lib [name]` | Initialize a new library project |
-| `sino init --bin [name]` | Initialize a new binary project |
-| `sino build [--static\|--shared\|--native]` | Build the project |
-| `sino install` | Install dependencies from `sino.toml` |
-| `sino add <source> [version]` | Add a dependency |
-| `sino remove <name>` | Remove a dependency |
-| `sino update [name...]` | Update dependencies |
-| `sino test` | Run tests in `tests/` |
-| `sino doc` | Generate documentation |
-| `sino publish` | Publish (stub — see [Publishing](#publishing)) |
-| `sino clean` | Remove build artifacts |
-| `sino run [args...]` | Run `src/main.si` |
-| `sino version` | Show version and detected compilers |
-| `sino help` | Show help |
+| `mozhi init --lib [name]` | Initialize a new library project |
+| `mozhi init --bin [name]` | Initialize a new binary project |
+| `mozhi build [--static\|--shared\|--native]` | Build the project |
+| `mozhi install` | Install dependencies from `mozhi.toml` |
+| `mozhi add <source> [version]` | Add a dependency |
+| `mozhi remove <name>` | Remove a dependency |
+| `mozhi update [name...]` | Update dependencies |
+| `mozhi test` | Run tests in `tests/` |
+| `mozhi doc` | Generate documentation |
+| `mozhi publish` | Publish (stub — see [Publishing](#publishing)) |
+| `mozhi clean` | Remove build artifacts |
+| `mozhi run [args...]` | Run `src/main.mz` |
+| `mozhi version` | Show version and detected compilers |
+| `mozhi help` | Show help |
 
 See [COMMANDS.md](docs/COMMANDS.md) for full details.
 
@@ -109,31 +109,31 @@ See [COMMANDS.md](docs/COMMANDS.md) for full details.
 
 ## Project Structure
 
-A Sino library project created by `sino init --lib`:
+A Mozhi library project created by `mozhi init --lib`:
 
 ```
 mylib/
-├── sino.toml          # Package manifest
-├── src/               # Sino source files (.si)
-│   ├── mylib.si       # Main module
-│   └── vector.si      # Sub-module (import mylib.vector)
+├── mozhi.toml          # Package manifest
+├── src/               # Mozhi source files (.mz)
+│   ├── mylib.mz       # Main module
+│   └── vector.mz      # Sub-module (import mylib.vector)
 ├── native/            # Foreign function implementations
 │   ├── mylib.c        # C functions
 │   ├── mylib.cpp      # C++ functions (extern "C")
 │   └── simd.S         # Assembly functions
 ├── include/           # C/C++ headers
 │   └── mylib.h
-├── tests/             # Test files (.si)
-│   └── test_lib.si
+├── tests/             # Test files (.mz)
+│   └── test_lib.mz
 ├── examples/          # Example programs
-│   └── demo.si
+│   └── demo.mz
 ├── README.md
 └── LICENSE
 ```
 
 ---
 
-## Manifest (`sino.toml`)
+## Manifest (`mozhi.toml`)
 
 ```toml
 name = "math"
@@ -163,7 +163,7 @@ See [MANIFEST.md](docs/MANIFEST.md) for full reference.
 
 ## Foreign Function Interface (FFI)
 
-Sino libraries can call C, C++, Assembly, and Rust functions through the FFI.
+Mozhi libraries can call C, C++, Assembly, and Rust functions through the FFI.
 
 ### C
 
@@ -214,22 +214,22 @@ See [FFI.md](docs/FFI.md) for full details.
 ### GitHub
 
 ```bash
-sino add github:owner/repo           # latest
-sino add github:owner/repo@1.2.0     # specific tag
-sino add github:owner/repo@v2.0.0    # tag with v prefix
+mozhi add github:owner/repo           # latest
+mozhi add github:owner/repo@1.2.0     # specific tag
+mozhi add github:owner/repo@v2.0.0    # tag with v prefix
 ```
 
 The package manager:
 1. Clones the repository (shallow clone)
-2. Reads its `sino.toml`
-3. Caches it in `~/.sino/cache/github/`
-4. Creates a symlink in `sino_modules/`
-5. Records the resolved version in `sino.lock`
+2. Reads its `mozhi.toml`
+3. Caches it in `~/.mozhi/cache/github/`
+4. Creates a symlink in `mozhi_modules/`
+5. Records the resolved version in `mozhi.lock`
 
 ### Local Path
 
 ```bash
-sino add local:../mylib
+mozhi add local:../mylib
 ```
 
 Useful during development — changes to the local library are immediately visible.
@@ -237,7 +237,7 @@ Useful during development — changes to the local library are immediately visib
 ### Registry (Future)
 
 ```bash
-sino add serde 1.0
+mozhi add serde 1.0
 ```
 
 The public registry is not yet launched. For now, use GitHub dependencies.
@@ -246,7 +246,7 @@ The public registry is not yet launched. For now, use GitHub dependencies.
 
 ## Semantic Versioning
 
-sino-pkg supports the following version requirement operators:
+mozhi-pkg supports the following version requirement operators:
 
 | Operator | Example | Matches |
 |----------|---------|---------|
@@ -262,9 +262,9 @@ sino-pkg supports the following version requirement operators:
 
 ---
 
-## Lock File (`sino.lock`)
+## Lock File (`mozhi.lock`)
 
-After `sino install`, a lock file is generated:
+After `mozhi install`, a lock file is generated:
 
 ```json
 {
@@ -273,14 +273,14 @@ After `sino install`, a lock file is generated:
   "packages": {
     "github:owner/repo": {
       "version": "1.2.0",
-      "source": "/home/user/.sino/cache/github/owner_repo@1.2.0",
+      "source": "/home/user/.mozhi/cache/github/owner_repo@1.2.0",
       "resolved_at": "2026-08-01T12:00:00+00:00"
     }
   }
 }
 ```
 
-Commit `sino.lock` to your repository for reproducible builds.
+Commit `mozhi.lock` to your repository for reproducible builds.
 
 ---
 
@@ -305,11 +305,11 @@ Commit `sino.lock` to your repository for reproducible builds.
 
 ## Publishing
 
-`sino publish` is currently a stub. To distribute your library:
+`mozhi publish` is currently a stub. To distribute your library:
 
 1. Push your project to GitHub
 2. Tag a release: `git tag v1.0.0 && git push origin v1.0.0`
-3. Others can install it with: `sino add github:yourname/yourlib@1.0.0`
+3. Others can install it with: `mozhi add github:yourname/yourlib@1.0.0`
 
 A public registry is planned for a future release.
 
@@ -332,5 +332,5 @@ MIT — see [LICENSE](LICENSE).
 
 ## Related
 
-- [Sino Language](https://github.com/crossberry-in/sino-lang-docs) — The Sino interpreter and language documentation
-- [Sino Language (Source)](https://github.com/crossberry-in/sino-lang) — Closed-source interpreter source (private)
+- [Mozhi Language](https://github.com/crossberry-in/mozhi-doc) — The Mozhi interpreter and language documentation
+- [Mozhi Language (Source)](https://github.com/crossberry-in/mozhi-lang) — Closed-source interpreter source (private)

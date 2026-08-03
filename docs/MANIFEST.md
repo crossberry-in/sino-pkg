@@ -1,6 +1,6 @@
-# Manifest Format (`sino.toml`)
+# Manifest Format (`mozhi.toml`)
 
-The `sino.toml` file is the manifest for a Sino package. It describes the package's metadata, dependencies, and build configuration.
+The `mozhi.toml` file is the manifest for a Mozhi package. It describes the package's metadata, dependencies, and build configuration.
 
 ---
 
@@ -11,7 +11,7 @@ name = "math"
 version = "1.0.0"
 authors = ["Alice <alice@example.com>", "Bob"]
 license = "MIT"
-description = "A math library for Sino"
+description = "A math library for Mozhi"
 
 [dependencies]
 "github:alice/vector" = "^1.0.0"
@@ -65,7 +65,7 @@ Build configuration for foreign code.
 
 ### `[build.output]`
 
-Output type for `sino build`.
+Output type for `mozhi build`.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -85,7 +85,7 @@ Produces a static library archive:
 | macOS | `lib<name>.a` |
 | Windows | `lib<name>.a` (MinGW) or `<name>.lib` (MSVC) |
 
-Also produces `<name>.silib` (native Sino package).
+Also produces `<name>.silib` (native Mozhi package).
 
 ### `shared`
 
@@ -101,7 +101,7 @@ Also produces `<name>.silib`.
 
 ### `native`
 
-Produces only the native Sino library: `<name>.silib` (a ZIP archive of `.si` files + `sino.toml`). No C/C++/ASM/Rust compilation occurs, even if `[build]` flags are set.
+Produces only the native Mozhi library: `<name>.silib` (a ZIP archive of `.mz` files + `mozhi.toml`). No C/C++/ASM/Rust compilation occurs, even if `[build]` flags are set.
 
 ---
 
@@ -125,7 +125,7 @@ See [Semantic Versioning](../README.md#semantic-versioning) in the README.
 
 ## Minimal Manifest
 
-The smallest valid `sino.toml`:
+The smallest valid `mozhi.toml`:
 
 ```toml
 name = "mylib"
@@ -138,7 +138,7 @@ All other fields have sensible defaults.
 
 ## Binary Project Manifest
 
-For an executable (`sino init --bin`):
+For an executable (`mozhi init --bin`):
 
 ```toml
 name = "myapp"
@@ -155,7 +155,7 @@ rust = false
 type = "native"
 ```
 
-Binary projects typically use `type = "native"` (just Sino source, no foreign code).
+Binary projects typically use `type = "native"` (just Mozhi source, no foreign code).
 
 ---
 

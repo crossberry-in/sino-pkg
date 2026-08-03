@@ -1,14 +1,14 @@
-# Sino Package Manager — Windows installer (PowerShell)
+# Mozhi Package Manager — Windows installer (PowerShell)
 #
 # Usage:
-#   irm https://github.com/crossberry-in/sino-pkg/raw/main/install.ps1 | iex
+#   irm https://github.com/crossberry-in/mozhi-pkg/raw/main/install.ps1 | iex
 #
 
 $ErrorActionPreference = "Stop"
 
-$Repo = "crossberry-in/sino-pkg"
-$InstallDir = "$env:USERPROFILE\.sino\bin"
-$BinaryName = "sino"
+$Repo = "crossberry-in/mozhi-pkg"
+$InstallDir = "$env:USERPROFILE\.mozhi\bin"
+$BinaryName = "mozhi"
 
 function Write-Info    { param([string]$Msg) Write-Host "[info]  $Msg" -ForegroundColor Cyan }
 function Write-OK      { param([string]$Msg) Write-Host "[ok]    $Msg" -ForegroundColor Green }
@@ -17,7 +17,7 @@ function Write-Err     { param([string]$Msg) Write-Host "[error] $Msg" -Foregrou
 
 Write-Host ""
 Write-Host "  ===================================" -ForegroundColor Cyan
-Write-Host "   Sino Package Manager Installer (Windows)" -ForegroundColor Cyan
+Write-Host "   Mozhi Package Manager Installer (Windows)" -ForegroundColor Cyan
 Write-Host "  ===================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -48,10 +48,10 @@ if (-not $PythonBin) {
 
 # --- Download -----------------------------------------------------------
 
-$DownloadUrl = "https://raw.githubusercontent.com/$Repo/main/sino"
+$DownloadUrl = "https://raw.githubusercontent.com/$Repo/main/mozhi"
 $TmpFile = [System.IO.Path]::GetTempFileName()
 
-Write-Info "Downloading sino CLI..."
+Write-Info "Downloading mozhi CLI..."
 try {
     Invoke-WebRequest -Uri $DownloadUrl -OutFile $TmpFile -UseBasicParsing
 } catch {
@@ -68,15 +68,15 @@ if (-not (Test-Path $InstallDir)) {
 $FinalPath = Join-Path $InstallDir $BinaryName
 Move-Item -Path $TmpFile -Destination $FinalPath -Force
 
-# Create a .cmd wrapper so 'sino' works in CMD and PowerShell
-$CmdWrapper = "$InstallDir\sino.cmd"
+# Create a .cmd wrapper so 'mozhi' works in CMD and PowerShell
+$CmdWrapper = "$InstallDir\mozhi.cmd"
 @"
 @echo off
-$PythonBin "%~dp0sino" %*
+$PythonBin "%~dp0mozhi" %*
 "@ | Set-Content -Path $CmdWrapper -Encoding ASCII
 
-# Also rename the downloaded script to sino.py for clarity
-Rename-Item -Path $FinalPath -NewName "sino.py" -ErrorAction SilentlyContinue
+# Also rename the downloaded script to mozhi.py for clarity
+Rename-Item -Path $FinalPath -NewName "mozhi.py" -ErrorAction SilentlyContinue
 
 # --- Add to PATH --------------------------------------------------------
 
@@ -92,19 +92,19 @@ if ($PathEnv -notlike "*$InstallDir*") {
 # --- Verify -------------------------------------------------------------
 
 Write-Info "Verifying installation..."
-& $PythonBin "$InstallDir\sino.py" version
+& $PythonBin "$InstallDir\mozhi.py" version
 if ($LASTEXITCODE -eq 0) {
-    Write-OK "sino-pkg is installed and working!"
+    Write-OK "mozhi-pkg is installed and working!"
 } else {
-    Write-Warn "sino was installed but verification failed."
-    Write-Warn "Open a NEW PowerShell window and run: sino version"
+    Write-Warn "mozhi was installed but verification failed."
+    Write-Warn "Open a NEW PowerShell window and run: mozhi version"
 }
 
 Write-Host ""
-Write-OK "Done! For docs, visit: https://github.com/crossberry-in/sino-pkg"
+Write-OK "Done! For docs, visit: https://github.com/crossberry-in/mozhi-pkg"
 Write-Host ""
 Write-Info "Quick start:"
-Write-Info "  sino init --lib mylib   # create a library"
-Write-Info "  sino init --bin myapp   # create an application"
+Write-Info "  mozhi init --lib mylib   # create a library"
+Write-Info "  mozhi init --bin myapp   # create an application"
 Write-Host ""
-Write-Warn "Note: Open a NEW PowerShell window for 'sino' to be on your PATH."
+Write-Warn "Note: Open a NEW PowerShell window for 'mozhi' to be on your PATH."
